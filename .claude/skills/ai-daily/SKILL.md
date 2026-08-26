@@ -290,8 +290,11 @@ python scripts/recent_editions.py --api http://localhost:8003
 ### 5. 조립
 
 `skeleton`에 `cards` 배열을 넣는다. 이때 **`closing.sources`를 반드시 갱신한다**
-— collector가 채워둔 값은 *후보 전체*의 매체 목록이라, 실제로 카드에 쓰지 않은
-매체가 출처로 남는다. 선별한 10장의 `link.label`에 실제 등장한 매체만 남길 것.
+— collector가 채워둔 값은 *후보 전체*의 매체 목록이라(2026-08-26 실측 36곳),
+실제로 카드에 쓰지 않은 매체가 출처로 남는다. 선별한 10장의 `link.label`에 실제
+등장한 매체만 남길 것. **나중에 카드 출처를 바꾸면 이 목록도 같이 고쳐라** —
+카드 10번 링크를 알파경제에서 TechCrunch로 바꾸고 목록을 안 고쳐, 발행분 출처에
+쓰지도 않은 매체가 남아 있었다. 이제 `verify_edition.py`가 어긋나면 FAIL 이다.
 
 `drafts/edition-<date>.json`으로 저장한다.
 
@@ -390,6 +393,7 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localh
 | 링크가 죽었다(4xx/5xx) · 매체 홈페이지다 · 구글 리디렉션이다 | 매체가 봇을 403 으로 막아 확인 불가 |
 | 이미지가 죽었다 · 이미지가 아닌 걸 준다 | 이미지가 없다(기본 아트로 나간다) |
 | 두 카드가 같은 이미지를 쓴다(주소가 달라도 해시로 잡는다) | 카드 제목과 원문 제목에 겹치는 낱말이 없다 |
+| `closing.sources`가 카드 링크 매체와 어긋난다 | |
 
 `--skip-link-check`는 네트워크가 없는 자리에서만 쓴다. 켜 두는 게 기본이다.
 

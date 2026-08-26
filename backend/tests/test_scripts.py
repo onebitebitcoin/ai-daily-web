@@ -1684,6 +1684,33 @@ def test_verify_does_not_warn_when_the_article_is_in_another_language() -> None:
     assert not any("겹치는 낱말이 없다" in w for w in report.warns)
 
 
+def test_verify_flags_a_source_no_card_links() -> None:
+    """실측: 카드 10번을 알파경제에서 TechCrunch 로 바꿨는데 출처 목록은 그대로였다."""
+    content = {
+        "cards": [verify_card(1, image=None)],
+        "closing": {"sources": ["알파경제"]},
+    }
+    content["cards"][0]["link"]["label"] = "TechCrunch 원문"
+
+    with verify_client({"https://news.example/": article_page()}) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("링크한 카드가 없다" in f for f in report.fails)
+    assert any("closing.sources 에 없다" in f for f in report.fails)
+
+
+def test_verify_accepts_sources_that_match_the_card_labels() -> None:
+    content = {
+        "cards": [verify_card(1, image=None)],
+        "closing": {"sources": ["매체"]},
+    }
+
+    with verify_client({"https://news.example/": article_page()}) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert report.fails == []
+
+
 def test_push_edition_refuses_when_the_link_check_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

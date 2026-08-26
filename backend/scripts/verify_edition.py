@@ -219,6 +219,39 @@ def check_duplicate_images(
     return report
 
 
+def check_sources(content: dict[str, Any]) -> Report:
+    """closing.sources 가 카드에 실제로 링크한 매체와 맞는지 본다.
+
+    사람이 손으로 유지하는 목록(수집기는 후보 전체 매체를 넣어 주고, 카드를 고른
+    뒤 쓴 것만 남긴다)이라 카드 출처를 바꾸면 조용히 어긋난다 — 실측: 카드 10번
+    링크를 알파경제에서 TechCrunch 로 고쳤는데 sources 는 알파경제 그대로였다.
+
+    라벨은 "<매체명> 원문"/"<채널명> 영상" 처럼 접미사가 붙으므로 포함 관계로 본다.
+    """
+    report = Report()
+    sources = [str(name) for name in (content.get("closing") or {}).get("sources") or []]
+    labels = [
+        str((card.get("link") or {}).get("label") or "")
+        for card in content.get("cards") or []
+    ]
+    labels = [label for label in labels if label]
+    if not sources or not labels:
+        return report
+
+    for name in sources:
+        if not any(name in label for label in labels):
+            report.fails.append(
+                f"closing.sources 의 '{name}' 을(를) 링크한 카드가 없다 — "
+                "카드 출처를 바꾸고 목록을 안 고쳤는지 확인해라"
+            )
+    for label in labels:
+        if not any(name in label for name in sources):
+            report.fails.append(
+                f"'{label}' 이 closing.sources 에 없다 — 출처 목록에 추가해라"
+            )
+    return report
+
+
 def check_edition(content: dict[str, Any], client: httpx.Client) -> Report:
     """에디션 하나를 통째로 점검한다. 반환 Report 의 fails 가 비어야 발행한다."""
     cards = content.get("cards") or []
@@ -244,6 +277,7 @@ def check_edition(content: dict[str, Any], client: httpx.Client) -> Report:
             images[num] = image
 
     report.merge(check_duplicate_images(hashes, images))
+    report.merge(check_sources(content))
     return report
 
 
