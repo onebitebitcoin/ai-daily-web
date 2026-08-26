@@ -46,6 +46,25 @@ def make_news(**overrides: Any) -> dict[str, Any]:
     return base
 
 
+# 대량 생성 테스트(등급별 N건 채우기 등)에서 쓰는 회전 제목 재료. 같은 문장을
+# 그대로 반복하면(예전 방식) collect_daily.cluster_events 가 전부 한 사건으로
+# 접어버려 "N건을 채운다" 전제가 깨진다 — 공유 단어를 "briefing" 하나 + 순환하는
+# 용어 하나로 제한해 두 제목 사이 공유 앵커가 EVENT_MIN_ANCHORS(3) 밑에 머물게
+# 한다(용어가 우연히 겹쳐도 앵커 2개뿐이라 안 묶인다).
+_AI_TITLE_TERMS = [
+    "OpenAI", "Anthropic", "Claude", "Gemini", "Llama",
+    "Mistral", "DeepSeek", "Perplexity", "Copilot", "ChatGPT", "GPT",
+]
+_INDUSTRY_TITLE_TERMS = [
+    "Nvidia", "TSMC", "Micron", "Broadcom", "HBM",
+    "Foundry", "DRAM", "NAND", "Hyperscaler", "CapEx", "Gigawatt",
+]
+
+
+def rotating_title(terms: list[str], i: int) -> str:
+    return f"{terms[i % len(terms)]} briefing {i}"
+
+
 def make_video(**overrides: Any) -> dict[str, Any]:
     base = {
         "id": "abc123",
@@ -76,6 +95,221 @@ def make_qa_response(prefix: str = "Q") -> dict[str, Any]:
             }
         ]
     }
+
+
+# ---- collect_daily 사건 클러스터링 (cluster_events / collapse_events) ----
+
+
+def event_news(title: str, **overrides: Any) -> dict[str, Any]:
+    """클러스터링 테스트용 후보 — 제목만 다르고 나머지는 창 안쪽 기본값."""
+    return make_news(title=title, **overrides)
+
+
+def test_event_signature_drops_the_bracket_head_and_the_outlet_tail() -> None:
+    """말머리와 매체 꼬리는 사건과 무관한데 여러 기사에 공통으로 붙어 유사도를 부풀린다."""
+    sig = collect_daily._event_signature(
+        {"title": "[특징주] 오픈AI 할라페뇨 추론칩 공개 - 조선비즈"}
+    )
+
+    assert {item for item in sig if item.startswith("W:")} == {
+        "W:오픈",
+        "W:할라페뇨",
+        "W:추론칩",
+        "W:공개",
+    }
+
+
+def test_event_signature_keeps_hangul_bigrams_but_not_latin_ones() -> None:
+    """한글만 바이그램을 담는다 — 영문 바이그램은 in·er 같은 흔한 쌍으로 다 붙어버린다."""
+    sig = collect_daily._event_signature({"title": "엔비디아 vera rubin the new chip"})
+
+    assert {"W:엔비디아", "W:vera", "W:rubin", "W:chip"} <= sig
+    assert {"k:엔비", "k:비디", "k:디아"} <= sig
+    assert not any(item.startswith("k:") and item[2:].isascii() for item in sig)
+    # 영문 기능어는 모든 기사가 공유하므로 서명에서 뺀다.
+    assert "W:the" not in sig
+    assert "W:new" not in sig
+
+
+def test_company_name_alone_does_not_make_two_articles_one_event() -> None:
+    """회사명 하나로 군이 뭉치던 버그의 회귀 테스트.
+
+    하한을 바이그램 개수로 걸었을 때는 "엔비디아"가 엔비/비디/디아 셋이라 그것만
+    겹쳐도 통과했다 — 서로 다른 사건 5건이 후보 1위에 10건짜리 한 군으로 뭉쳤다.
+    지금은 온전한 단어를 따로 세므로(EVENT_MIN_ANCHORS), 겹침 비율이 임계값을
+    넘더라도 회사명 하나로는 못 넘는다.
+    """
+    a = collect_daily._event_signature({"title": "엔비디아 신용 노출"})
+    b = collect_daily._event_signature({"title": "엔비디아 젯슨 출시"})
+
+    assert collect_daily._overlap(a, b) >= collect_daily.EVENT_SIM_THRESHOLD
+    assert collect_daily._shared_anchors(a, b) == 1
+    assert collect_daily._same_event(a, b) is False
+
+
+def test_cluster_events_folds_one_event_written_by_several_outlets() -> None:
+    items = [
+        event_news("오픈AI, 자체 추론칩 할라페뇨 공개", source_ref="지디넷"),
+        event_news("오픈AI 추론칩 '할라페뇨' 공개…엔비디아 의존 줄인다", source_ref="전자신문"),
+        event_news("[속보] 오픈AI 할라페뇨 추론칩 공개 - 조선비즈", source_ref="조선비즈"),
+        event_news("구글, 제미나이 3 모델 출시", source_ref="블로터"),
+    ]
+
+    groups = collect_daily.cluster_events(items)
+
+    assert [[n["source_ref"] for n in group] for group in groups] == [
+        ["지디넷", "전자신문", "조선비즈"],
+        ["블로터"],
+    ]
+
+
+def test_cluster_events_does_not_chain_through_a_middle_article() -> None:
+    """A~B 이고 B~C 라고 A~C 까지 한 군이 되면 안 된다.
+
+    단일 연결만 쓰면 주제가 조금씩 옮겨가는 사슬로 무관한 사건이 한 군이 된다.
+    군의 머리와도 EVENT_HEAD_THRESHOLD 이상 겹치라는 두 번째 조건이 그걸 끊는다.
+    """
+    head = event_news("오픈AI 할라페뇨 추론칩 공개", source_ref="head")
+    middle = event_news(
+        "오픈AI 할라페뇨 추론칩 공개에 엔비디아 데이터센터 주문 감소 전망", source_ref="middle"
+    )
+    tail = event_news("엔비디아 데이터센터 주문 감소 전망에 월가 목표주가 하향", source_ref="tail")
+
+    # tail 은 middle 하고만 보면 같은 사건 판정이 난다 — 끊는 건 머리 관문이다.
+    assert collect_daily._same_event(
+        collect_daily._event_signature(middle), collect_daily._event_signature(tail)
+    )
+    assert (
+        collect_daily._overlap(
+            collect_daily._event_signature(tail), collect_daily._event_signature(head)
+        )
+        < collect_daily.EVENT_HEAD_THRESHOLD
+    )
+
+    groups = collect_daily.cluster_events([head, middle, tail])
+
+    assert [[n["source_ref"] for n in group] for group in groups] == [
+        ["head", "middle"],
+        ["tail"],
+    ]
+
+
+def test_collapse_events_promotes_the_group_member_that_has_an_image() -> None:
+    """이미지는 대표를 바꿔서 얻는다 — 다른 매체 이미지를 가져다 붙이지 않는다."""
+    first = event_news(
+        "오픈AI, 자체 추론칩 할라페뇨 공개",
+        source_ref="지디넷",
+        url="https://a.example/1",
+        image_url=None,
+    )
+    with_image = event_news(
+        "오픈AI 추론칩 '할라페뇨' 공개…엔비디아 의존 줄인다",
+        source_ref="전자신문",
+        url="https://b.example/2",
+        image_url="https://img.example/b.jpg",
+    )
+    third = event_news(
+        "[속보] 오픈AI 할라페뇨 추론칩 공개 - 조선비즈",
+        source_ref="조선비즈",
+        url="https://c.example/3",
+        image_url="https://img.example/c.jpg",
+    )
+
+    collapsed = collect_daily.collapse_events([first, with_image, third])
+
+    assert len(collapsed) == 1
+    rep = collapsed[0]
+    # 이미지와 링크가 같은 기사에서 나온다.
+    assert rep["image_url"] == "https://img.example/b.jpg"
+    assert rep["url"] == "https://b.example/2"
+    assert rep["cluster_size"] == 3
+    assert rep["also_covered_by"] == ["지디넷", "조선비즈"]
+    assert [t["title"] for t in rep["cluster_titles"]] == [first["title"], third["title"]]
+    assert [t["url"] for t in rep["cluster_titles"]] == [
+        "https://a.example/1",
+        "https://c.example/3",
+    ]
+
+
+def test_collapse_events_keeps_the_first_article_when_the_group_has_no_image() -> None:
+    first = event_news("오픈AI, 자체 추론칩 할라페뇨 공개", source_ref="지디넷")
+    second = event_news("오픈AI 추론칩 '할라페뇨' 공개…엔비디아 의존 줄인다", source_ref="전자신문")
+
+    collapsed = collect_daily.collapse_events([first, second])
+
+    assert collapsed[0]["source_ref"] == "지디넷"
+    assert collapsed[0]["cluster_size"] == 2
+
+
+def test_collapse_events_marks_a_lone_article_as_a_group_of_one() -> None:
+    """카드를 고르는 쪽이 필드 유무를 따지지 않게, 단독 기사에도 같은 키를 붙인다."""
+    collapsed = collect_daily.collapse_events([event_news("구글, 제미나이 3 모델 출시")])
+
+    assert collapsed[0]["cluster_size"] == 1
+    assert collapsed[0]["also_covered_by"] == []
+    assert collapsed[0]["cluster_titles"] == []
+
+
+def test_collapse_events_does_not_mutate_the_input_items() -> None:
+    items = [
+        event_news("오픈AI, 자체 추론칩 할라페뇨 공개", source_ref="지디넷"),
+        event_news("오픈AI 추론칩 '할라페뇨' 공개…엔비디아 의존 줄인다", source_ref="전자신문"),
+    ]
+    before = [dict(n) for n in items]
+
+    collect_daily.collapse_events(items)
+
+    assert items == before
+
+
+def test_filter_news_folds_events_before_counting_the_limit() -> None:
+    """상한은 접은 뒤에 센다 — 접기 전에 자르면 상위 칸을 같은 사건이 나눠 먹는다."""
+    distinct = [
+        make_news(source_ref=f"ai-{i}", title=rotating_title(_AI_TITLE_TERMS, i))
+        for i in range(collect_daily.NEWS_LIMIT)
+    ]
+    same_event = [
+        make_news(source_ref=f"dup-{i}", title=rotating_title(_AI_TITLE_TERMS, 0))
+        for i in range(4)
+    ]
+
+    result = collect_daily.filter_news(distinct + same_event, NOW)
+
+    # 접고 세야 "서로 다른 사건 100건"이다. 잘라 놓고 접었다면 96건이 됐다.
+    assert len(result) == collect_daily.NEWS_LIMIT
+    assert len({n["title"] for n in result}) == collect_daily.NEWS_LIMIT
+    assert result[0]["cluster_size"] == 5
+
+
+def test_filter_news_puts_a_multi_outlet_event_above_a_lone_fresher_article() -> None:
+    """최종 정렬 축은 등급 → 매체 수 → 트렌딩 → 최신순이다.
+
+    축 순서가 뒤집혀 있을 때는 7개 매체가 쓴 오픈AI 할라페뇨 발표가 단독 기사들
+    아래로 내려가 있었다(2026-08-26 실측).
+    """
+    older = "2026-07-31T02:00:00+00:00"
+    event = [
+        event_news("오픈AI, 자체 추론칩 할라페뇨 공개", source_ref="지디넷", crawled_at=older),
+        event_news(
+            "오픈AI 추론칩 '할라페뇨' 공개…엔비디아 의존 줄인다",
+            source_ref="전자신문",
+            crawled_at=older,
+        ),
+        event_news(
+            "[속보] 오픈AI 할라페뇨 추론칩 공개 - 조선비즈",
+            source_ref="조선비즈",
+            crawled_at=older,
+        ),
+    ]
+    lone = event_news(
+        "구글, 제미나이 3 모델 출시", source_ref="블로터", crawled_at="2026-07-31T02:55:00+00:00"
+    )
+
+    result = collect_daily.filter_news([lone, *event], NOW)
+
+    assert [n["source_ref"] for n in result] == ["지디넷", "블로터"]
+    assert result[0]["cluster_size"] == 3
+    assert result[0]["also_covered_by"] == ["전자신문", "조선비즈"]
 
 
 # ---- collect_daily.filter_news ----
@@ -256,7 +490,9 @@ def test_classify_relevance_marks_industry_articles_as_industry() -> None:
 
 
 def test_classify_relevance_does_not_treat_the_word_token_as_an_ai_signal() -> None:
-    """'토큰'은 AI_TERMS에 없다 — 코인 시세 기사가 '토큰'이라는 단어만으로 ai로 잘못 분류되면 안 된다.
+    """'토큰'은 AI_TERMS에 없다.
+
+    코인 시세 기사가 '토큰'이라는 단어만으로 ai 로 잘못 분류되면 안 된다.
 
     AI_TERMS 주석이 남긴 이유 그대로다: "토큰"을 넣으면 코인 기사를 그대로 끌고 온다.
     """
@@ -308,7 +544,7 @@ def test_filter_news_truncates_lower_tiers_when_ai_fills_the_limit() -> None:
     ai = [
         make_news(
             source_ref=f"ai-{i}",
-            title="오픈AI 새 모델 공개",
+            title=rotating_title(_AI_TITLE_TERMS, i),
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.NEWS_LIMIT)
@@ -415,7 +651,7 @@ def test_filter_news_reserves_slots_for_industry_when_ai_would_fill_the_limit() 
     ai = [
         make_news(
             source_ref=f"ai-{i}",
-            title="오픈AI 새 모델 공개",
+            title=rotating_title(_AI_TITLE_TERMS, i),
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.NEWS_LIMIT + 20)
@@ -423,7 +659,7 @@ def test_filter_news_reserves_slots_for_industry_when_ai_would_fill_the_limit() 
     industry = [
         make_news(
             source_ref=f"industry-{i}",
-            title="엔비디아 HBM 공급 부족",
+            title=rotating_title(_INDUSTRY_TITLE_TERMS, i),
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.INDUSTRY_RESERVE + 5)
@@ -441,7 +677,7 @@ def test_filter_news_gives_the_reserve_back_when_industry_is_short() -> None:
     ai = [
         make_news(
             source_ref=f"ai-{i}",
-            title="오픈AI 새 모델 공개",
+            title=rotating_title(_AI_TITLE_TERMS, i),
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.NEWS_LIMIT + 20)
@@ -650,7 +886,10 @@ def test_trending_pool_videos_uses_a_24h_window_not_the_card_48h() -> None:
 
 
 def test_filter_videos_requires_ai_topic_and_summary() -> None:
-    items = [make_video(id="wrong-topic", topic="비트코인"), make_video(id="no-summary", summary="")]
+    items = [
+        make_video(id="wrong-topic", topic="비트코인"),
+        make_video(id="no-summary", summary=""),
+    ]
 
     assert collect_daily.filter_videos(items, NOW) == []
 
@@ -890,6 +1129,21 @@ def test_collect_daily_main_fails_loudly_when_source_down(tmp_path: Path) -> Non
 
 
 # ---- push_edition ----
+
+
+def test_edition_scripts_default_to_this_projects_backend() -> None:
+    """포크가 남긴 8002(btc-daily-web) 기본값의 회귀 테스트.
+
+    `--api` 를 빠뜨리면 오늘자 AI 에디션이 btc-daily-web 의 DB 로 들어가고,
+    중복 점검은 남의 발행 이력을 읽는다. 에디션을 건드리는 세 스크립트가 같은
+    곳을 봐야 한다(포트는 CLAUDE.md 가 고정한 8003).
+    """
+    assert push_edition.DEFAULT_API == "http://localhost:8003"
+    assert recent_editions.DEFAULT_API == "http://localhost:8003"
+    assert collect_daily.DEFAULT_EDITION_API == "http://localhost:8003"
+    assert push_edition.parse_args(["edition.json"]).api == "http://localhost:8003"
+    assert recent_editions.parse_args([]).api == "http://localhost:8003"
+
 
 
 def test_push_edition_local_validation_fails_before_post(tmp_path: Path) -> None:

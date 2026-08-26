@@ -178,9 +178,10 @@
 - `cluster_size`가 크면 여러 매체가 동시에 다룬 사건이다 — 카드로 쓸 우선순위
   신호로 삼는다.
 - **`cluster_titles`를 반드시 훑어라.** `cluster_events`는 주제가 인접한 다른
-  사건을 가끔 같이 묶는다(2026-08-26 코퍼스 285건 실측: 군 27개 중 1개가
-  그랬다 — "인도 AI 데이터센터 투자"에 "머스크 AI 위성 발사"가 붙었다). 대표
-  제목만 보고 카드를 쓰면 다른 사건의 매체 수를 빌려 쓰게 된다.
+  사건을 가끔 같이 묶는다(2026-08-26 실측: "스페이스X 베라 CPU 도입"과 "엔비디아
+  베라 루빈 성능 확장"이 6매체짜리 한 군이 됐다). 대표 제목만 보고 카드를 쓰면
+  다른 사건의 매체 수를 빌려 쓰게 된다. 반대로 표기가 갈리면 같은 사건도
+  쪼개진다 — 그때는 사람이 합친다.
 - 대표는 "군에서 가장 앞선 것 중 이미지가 있는 것"이다. 이미지와 후보의 `link`는
   항상 같은 기사에서 나온다 — **다른 매체 이미지를 가져다 붙이지 마라.**
 
@@ -194,9 +195,9 @@ python scripts/push_edition.py drafts/edition-<date>.json --api http://localhost
 python scripts/push_edition.py drafts/edition-<date>.json --api http://localhost:8003 --date <date>
 ```
 
-> `push_edition.py`의 `DEFAULT_API`는 아직 `http://localhost:8002`다
-> (`btc-daily-web`에서 그대로 넘어온 값이라 이 프로젝트 포트와 다르다) —
-> 고쳐지기 전까지는 `--api`를 매번 명시해야 한다.
+> `DEFAULT_API`는 `http://localhost:8003`(이 프로젝트 백엔드)이라 `--api`를
+> 생략해도 된다. 포크 직후에는 이 값이 8002(`btc-daily-web`)였다 — 어디로
+> 쏘는지 눈에 보이게 두려고 예시에는 그대로 적어 둔다.
 
 내부 동작:
 1. `app.schemas.EditionContent`로 **로컬 선검증** — 여기서 실패하면 서버에
@@ -235,6 +236,7 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localh
 | `.env.example`의 `DOMAIN` | 실제 도메인 |
 | `deploy/nginx/DOMAIN.bootstrap.conf`, `deploy/nginx/DOMAIN.conf` | 파일 안의 `DOMAIN` 플레이스홀더를 실제 도메인으로, 파일명도 `<도메인>.conf`로 바꾼 뒤 배포 |
 | `backend/scripts/collect_daily.py`의 `DEFAULT_EDITION_API` | 로컬(`http://localhost:8003`) → 프로덕션 URL |
+| `backend/scripts/push_edition.py`·`recent_editions.py`의 `DEFAULT_API` | 로컬 → 프로덕션 URL (셋을 함께 고정하는 테스트도 같이 고친다) |
 | `scripts/daily-cron.sh`의 `API` | 로컬 → 프로덕션 URL |
 
 ## 5. 이미지 규칙
@@ -249,13 +251,11 @@ stem(`frontend/src/assets/media/`에 실물 파일 존재). 자동 발행 파이
 - 뉴스: 후보의 `image_url` 그대로.
 - 유튜브: `https://i.ytimg.com/vi/{video_id}/hqdefault.jpg`.
 
-이 프로젝트가 실제로 마주치는 이미지 문제는 있느냐 없느냐다. 2026-08-26
-코퍼스 285건 기준 드라이런에서, 클러스터링 전 후보 100건 중 이미지가 붙은 건
-39건(39%)뿐이었다 — googlenews 경유 기사가 `image_url` 없이 들어오는 탓이다.
-`collect_daily.py`의 `collapse_events`가 사건 군 안에서 이미지 있는 기사를
-대표로 올리는 이유가 이거고, 그 결과 상위 10건 커버리지가 4/10에서 7/10으로
-올랐다. 그래도 하루 10장 중 3장 안팎은 이미지를 못 채울 수 있다는 뜻이다 —
-`media: null`을 두려워하지 않는다.
+이 프로젝트가 실제로 마주치는 이미지 문제는 있느냐 없느냐다. 2026-08-26 실측에서
+최종 후보 100건 중 이미지가 붙은 건 41건(41%)뿐이었다 — googlenews 경유 기사가
+`image_url` 없이 들어오는 탓이다. `collect_daily.py`의 `collapse_events`가 사건 군
+안에서 이미지 있는 기사를 대표로 올리는 이유가 이거다. 그래도 하루 10장 중 몇 장은
+이미지를 못 채울 수 있다는 뜻이다 — `media: null`을 두려워하지 않는다.
 
 이미지가 없는 후보는 `media: null`로 둔다 — 가짜 URL이나 플레이스홀더로
 채우지 않는다. 개발자 포럼·레딧처럼 대표 이미지를 주지 않는 소스, 그리고 썸네일이

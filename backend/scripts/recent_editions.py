@@ -25,7 +25,9 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 KST = ZoneInfo("Asia/Seoul")
-DEFAULT_API = "http://localhost:8002"
+# push_edition.py 와 같은 값이어야 한다 — 8002 는 btc-daily-web 이라, 그대로 두면
+# 중복 점검이 남의 발행 이력을 읽는다.
+DEFAULT_API = "http://localhost:8003"
 DEFAULT_DAYS = 7
 
 

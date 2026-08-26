@@ -140,14 +140,14 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localh
 bash deploy/backup.sh          # 수동 1회
 ```
 
-> `deploy/backup.sh`는 아직 `btc-daily-web` 시절 이름(`BTC_DAILY_BACKUP_DIR`,
-> 파일명 접두사 `btc-daily-`)을 그대로 쓴다 — 도메인을 정할 때 같이 정리한다.
-> 그전까지는 백업 파일이 `~/backups/btc-daily/`에 쌓인다.
+백업 파일은 `~/backups/ai-daily/ai-daily-<YYYY-MM-DD>.sql.gz`로 쌓인다
+(`AI_DAILY_BACKUP_DIR`로 위치를 바꿀 수 있다). btc-daily-web과 디렉토리·접두사가
+달라 두 프로젝트의 덤프가 서로를 덮어쓰지 않는다.
 
 복구:
 
 ```bash
-gunzip -c ~/backups/btc-daily/btc-daily-<YYYY-MM-DD>.sql.gz \
+gunzip -c ~/backups/ai-daily/ai-daily-<YYYY-MM-DD>.sql.gz \
   | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
 
@@ -159,5 +159,5 @@ gunzip -c ~/backups/btc-daily/btc-daily-<YYYY-MM-DD>.sql.gz \
 | `/d/<date>` 새로고침이 404 | 컨테이너 nginx의 `try_files` SPA fallback 확인(`frontend/nginx.conf`). 백엔드에는 catch-all이 없다 |
 | 발행이 401 | `backend/.env`와 서버 `.env`의 `ADMIN_API_KEY` 불일치. 서버가 빈 값이면 항상 401(fail closed) |
 | 발행이 "cover가 meta.date와 불일치" | stale draft다. 가드를 우회하지 말고 draft를 최신 코드로 재생성할 것 |
-| `push_edition.py`가 `:8002`로 붙으려 한다 | `--api` 기본값이 아직 `btc-daily-web` 값(`localhost:8002`)이다 — `--api http://localhost:8003`을 명시한다 |
+| `push_edition.py`가 엉뚱한 백엔드로 붙는다 | `--api`로 넘긴 주소를 본다. 기본값은 `localhost:8003`이다(포크 직후엔 btc-daily-web의 8002였다) |
 | `/`가 에러 화면 | DB에 편집본이 0건이면 `latest`가 404다. 한 건이라도 발행하면 해소된다 |

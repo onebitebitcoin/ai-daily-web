@@ -37,8 +37,14 @@ curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/news?asset=ai&
 curl -s -o /dev/null -w "%{http_code}" "http://localhost:23456/api/queue"
 ```
 
-백엔드가 안 떠 있으면 `bash scripts/dev.sh backend`로 띄운다.
+백엔드가 안 떠 있으면 `bash scripts/dev.sh backend`로 띄운다(내부적으로
+`uvicorn app.main:app --port 8003 --reload`를 돌린다).
+
 소스(8000/23456)가 죽어 있으면 **거기서 멈추고 사용자에게 알린다** — 더미 데이터로 대체 금지.
+
+**`backend/.env`와 저장소 루트의 `.env`를 혼동하지 마라.** 백엔드가 실제로 읽는
+건 `backend/.env`(`ADMIN_API_KEY`)다. 루트 `.env`는 docker-compose용(Postgres
+URL 등)이라 다른 파일이다. 헷갈리면 8003이 500을 뱉는다.
 
 ### 2. 수집
 
@@ -46,7 +52,24 @@ curl -s -o /dev/null -w "%{http_code}" "http://localhost:23456/api/queue"
 cd backend && source .venv/bin/activate && python scripts/collect_daily.py
 ```
 
-→ `drafts/draft-<YYYY-MM-DD>.json` 생성. 구조:
+→ `drafts/draft-<YYYY-MM-DD>.json` 생성하고 요약을 stdout에 찍는다. 정상
+실행이면 이런 모양이다(2026-08-26 실측, 클러스터링 로직을 고친 뒤의 값 —
+이 스킬에 수치를 인용할 일이 있으면 아래 것만 써라):
+
+```
+news candidates: 100 — ai 89 / industry 11 / other 0
+event folding: 42건을 접어 사건 100개 — 가장 큰 사건 7매체
+image coverage: 41/100 (41%)
+video candidates: 15 — 최근 3일 발행분 0건 제외
+trending pool: news 177 / videos 15 -> 15 topics
+trending corpus: 뉴스 177건 54매체 · 유튜브 15건 14채널 집계
+cover quote: wiener-purpose-put-into-the-machine (노버트 위너) — 최근 0개 제외
+```
+
+("최근 0개 제외" 두 곳은 이 실측 당시 발행 이력이 없어서다. 이력이 쌓인
+뒤에는 그 자리 숫자가 올라간다 — 3.1절 참고.)
+
+draft 구조:
 
 - `skeleton` — `meta`/`theme`/`brand`/`cover`/`closing`이 이미 채워져 있다. 건드리지 마라.
   - `cover.quote` — 그날의 AI·컴퓨팅 인물 인용구. 스크립트가 발행 이력을 읽어
@@ -92,8 +115,9 @@ cd backend && source .venv/bin/activate && python scripts/collect_daily.py
 | `industry` | 반도체·전력·데이터센터·CAPEX — AI를 굴리는 물리적 비용 | 2순위 |
 | `other` | 크립토, 그 외 무관 소재 | 원칙적으로 안 쓴다 |
 
-- `ai`만으로 10장을 채우는 게 정상이다. 2026-08-26 코퍼스 285건 실측이 `ai`
-  251 / `industry` 23 / `other` 11이었다.
+- `ai`만으로 10장을 채우는 게 정상이다. 2026-08-26 실측(클러스터링 로직 수정
+  후)으로는 최종 후보 100건이 `ai` 89 / `industry` 11 / `other` 0으로, `other`
+  없이도 100칸이 다 찼다.
 - `ai` 후보가 모자라거나 남은 게 전부 지엽적이면 `industry`로 채운다.
   크립토 소재로 머릿수를 맞추지 마라.
 - `other`는 그 사건이 AI 산업·규제·수급에 직접 영향을 줄 때만 예외로 쓰고,
@@ -111,8 +135,9 @@ cd backend && source .venv/bin/activate && python scripts/collect_daily.py
 `collect_daily.py`가 후보를 만들 때 같은 사건을 다룬 여러 매체 기사를 이미
 한 건으로 접는다(`cluster_events`). my-news의 `is_duplicate`는 매체 내부
 중복만 잡는데, 이 프로젝트는 매체가 54곳(googlenews 경유 포함)이라 없으면
-카드 절반이 같은 사건이 된다 — 실측(2026-08-26): 오픈AI 자체 추론칩 '할라페뇨'
-발표 한 건이 후보 100칸 중 8칸을 먹었다.
+카드 절반이 같은 사건이 된다 — 2026-08-26 실측으로 하루 42건이 접혀 후보
+100건이 서로 다른 사건 100개가 됐고, 가장 큰 군(오픈AI 자체 추론칩 '할라페뇨'
+발표)이 7매체였다.
 
 후보 항목에 이 필드가 붙는다:
 
@@ -121,18 +146,24 @@ cd backend && source .venv/bin/activate && python scripts/collect_daily.py
 - `cluster_titles` — 나머지 기사의 제목/URL
 
 `cluster_size`가 큰 것을 우선 보되, **`cluster_titles`를 반드시 눈으로 훑어라.**
-클러스터링이 주제가 인접한 다른 사건을 가끔 같이 묶는다 — 실측(2026-08-26
-코퍼스 285건, 군 27개 중 1개): "인도 AI 데이터센터 80억달러 투자" 군에 "머스크
-AI 위성 발사"가 함께 묶였다. 둘 다 "AI 데이터센터 + 엔비디아칩"이라 서명이
-실제로 겹쳐서 생긴 일이다. 대표 제목만 보고 카드를 쓰면 다른 사건의 매체 수를
-빌려 쓰게 된다 — 묶인 게 실제로 한 사건인지 `cluster_titles`를 읽고 확인해라.
+클러스터링에는 알려진 한계가 둘 있다.
+
+- **주제가 인접한 다른 사건을 가끔 같이 묶는다.** 실측(2026-08-26): "스페이스X
+  베라 CPU 도입"과 "엔비디아 베라 루빈 성능 확장"이 한 군(6매체)으로 묶였다 —
+  둘 다 엔비디아 베라 계열 도입 건이라 서명이 실제로 겹쳐서 생긴 일이다. 대표
+  제목만 보고 카드를 쓰면 다른 사건의 매체 수를 빌려 쓰게 된다 — 묶인 게
+  실제로 한 사건인지 `cluster_titles`를 읽고 확인해라.
+- **표기가 갈리면 같은 사건도 쪼갠다.** 실측: 우크라이나 자율살상 드론 기사
+  6건이 "자율살상"/"자율 살상"/"살상 드론"으로 표기가 갈려 2건씩 세 군으로
+  나뉘었다. `cluster_titles`가 사실상 같은 얘기를 하면 사람이 합쳐야 한다.
 
 대표는 "군에서 가장 앞선 것 중 이미지가 있는 것"이다. **이미지와 `link`는 항상
 같은 기사에서 나온다** — 다른 매체 이미지를 가져다 붙이지 마라.
 
 한국어 기사와 영문 기사는 같은 사건이어도 잘 안 묶인다(표기 사전 없이 한글은
-문자 바이그램, 영문은 단어로 서명을 만들어서다). 후보에 한/영 같은 사건이
-따로 있으면 사람이 합쳐야 한다.
+문자 바이그램, 영문은 단어로 서명을 만들어서다) — 실측: 할라페뇨 사건이
+한국어 7건짜리 군 하나와 영문 2건짜리 군 둘로 따로 남았다. 후보에 한/영 같은
+사건이 흩어져 있으면 사람이 합쳐야 한다.
 
 #### 3.0.2. 지엽성 걸러내기
 
@@ -156,11 +187,11 @@ AI 위성 발사"가 함께 묶였다. 둘 다 "AI 데이터센터 + 엔비디�
 
 #### 3.0.5. 이미지가 부족하다
 
-googlenews 경유 기사가 `image_url` 없이 들어와, 클러스터링 전 후보 100건 중
-이미지가 39건뿐이었다(2026-08-26 드라이런). 클러스터링으로 이미지 있는 기사를
-대표로 올린 뒤 상위 10건 커버리지가 4/10 → 7/10으로 올랐지만, 여전히 10장을
-다 채우진 못한다. 후보 순위가 높아도 이미지가 없으면 4절의 이미지 순서를 그대로
-밟고, 안 되면 `media: null`로 낸다 — 가짜 이미지를 붙이지 마라.
+googlenews 경유 기사가 `image_url` 없이 들어와, 최종 후보 100건 중 이미지가
+붙은 건 41건(41%)뿐이다(2026-08-26 실측). `collapse_events`가 사건 군 안에서
+이미지 있는 기사를 대표로 올려주긴 하지만, 그래도 하루 10장 중 몇 장은 이미지를
+못 채울 수 있다는 뜻이다. 후보 순위가 높아도 이미지가 없으면 5.0절의 이미지
+순서를 그대로 밟고, 안 되면 `media: null`로 낸다 — 가짜 이미지를 붙이지 마라.
 
 ### 3.1. 최근 발행분 대비 중복 점검
 
@@ -172,12 +203,14 @@ cd backend && source .venv/bin/activate && \
 python scripts/recent_editions.py --api http://localhost:8003
 ```
 
-**이 프로젝트는 아직 한 번도 발행하지 않았다.** 발행 이력이 없으면 이 스크립트는
-`SystemExit`으로 "이전 발행분이 없다 — 중복 점검을 건너뛴다"를 내고 끝난다.
-이건 정상 동작이다. **이 단계를 건너뛰고 그 사실을 마지막 보고에
-적어라.** 발행이 며칠 쌓이면 이 단계가 실제로 작동하기 시작한다.
+발행 이력이 하나도 없으면 이 스크립트는 `SystemExit`으로 "이전 발행분이 없다 —
+중복 점검을 건너뛴다"를 내고 끝난다. 그건 정상 동작이다 — **이 단계를 건너뛰고
+그 사실을 마지막 보고에 적어라.** 뭔가 출력됐다면 그 날짜·카드가 실제 이력이니
+아래 기준으로 오늘 후보를 거른다. 로컬 백엔드에는 검증용으로 올린 발행분이
+섞여 있을 수 있다 — 같은 카드가 이틀 연속으로 보이면 그 사정을 의심하고,
+그것 때문에 오늘 카드를 통째로 비우지는 마라.
 
-발행 이력이 쌓인 뒤에는 btc-daily-web과 같은 기준을 쓴다:
+기준은 btc-daily-web과 같다:
 
 - 2~3일 안의 재등장은 허용한다. 진행 중인 사건의 후속 보도는 자연스럽다.
   단 새 숫자든 새 국면이든 어제와 다른 내용이 있어야 한다.
@@ -206,7 +239,7 @@ python scripts/recent_editions.py --api http://localhost:8003
 | `body` | **200자 내외** 한국어, 했습니다체. 숫자와 고유명사를 살린다 |
 | `quote` | 한 줄 촌철살인, 했습니다체. 없으면 `null`(전부 채우지 말 것 — 8~9개 정도) |
 | `link` | `{label: "<매체명> 원문", href: 후보의 url}` |
-| `media` | `{image: ..., href: null, cta: null}`. 고르는 순서는 `CONTENT_CONTRACT.md` 4.0절을 따른다 — 후보가 준 `image_url`은 3순위일 뿐, 그대로 정답으로 쓰지 마라. 이미지 없으면 `media: null`(3.0.5절 참고) |
+| `media` | `{image: ..., href: null, cta: null}`. 고르는 순서는 `CONTENT_CONTRACT.md` 5.0절을 따른다 — 후보가 준 `image_url`은 3순위일 뿐, 그대로 정답으로 쓰지 마라. 이미지 없으면 `media: null`(3.0.5절 참고) |
 
 작성 규칙:
 
@@ -235,7 +268,7 @@ python scripts/recent_editions.py --api http://localhost:8003
 - 사실만. 후보 데이터에 없는 숫자를 지어내지 마라
 - `body`에 인용구를 반복하지 마라
 - 이미지를 눈으로 봐라. 카드 10장의 이미지는 URL만 넣고 끝내지 말고 실제로
-  열어 기사와 맞는지 확인한다. 고르는 순서는 `CONTENT_CONTRACT.md` 4.0절 —
+  열어 기사와 맞는지 확인한다. 고르는 순서는 `CONTENT_CONTRACT.md` 5.0절 —
   **기사 본문 실사진 → 같은 기업·인물 실사진 → 후보 `image_url` → `media: null`**.
   AI 생성물 중 글자가 깨진 것은 반드시 뺀다.
 - 유튜브 썸네일 주의: 썸네일은 채널이 만든 마케팅 그래픽이라 숫자가 크게
@@ -339,11 +372,11 @@ cd backend && source .venv/bin/activate && \
 python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localhost:8003
 ```
 
-**`--api`를 반드시 명시해라.** `push_edition.py`와 `recent_editions.py`의
-`--api` 기본값은 둘 다 `http://localhost:8002`로 남아 있다 — btc-daily-web을
-포크할 때 안 고쳐진 값이다. 그대로 실행하면 btc-daily-web의 백엔드로 발행을
-시도하게 된다. `collect_daily.py`의 `--edition-api` 기본값만 8003으로 맞게
-고쳐져 있으니 헷갈리지 마라.
+`--api` 기본값은 `push_edition.py`·`recent_editions.py`·`collect_daily.py`
+셋 다 `http://localhost:8003`이라 생략해도 이 프로젝트 백엔드로 간다. 포크 직후
+둘이 8002(btc-daily-web)를 가리켜 남의 DB로 발행할 뻔했고, 지금은 테스트가
+세 값을 함께 고정한다(`test_edition_scripts_default_to_this_projects_backend`).
+그래도 명령줄에 적어 두는 편이 낫다 — 어디로 쏘는지 눈에 보인다.
 
 도메인이 정해지면 이 스킬의 6절·3.1절 `--api` 값을 프로덕션 주소로 바꿔야
 한다. `collect_daily.py`의 `DEFAULT_EDITION_API` 주석이 그 시점에 함께 채울
@@ -378,7 +411,7 @@ curl -s http://localhost:8003/api/editions
 | collect 중 "산업 보강 피드를 못 읽어 건너뛴다" | `--broad-news-url` 실패. `industry` 등급 없이 계속 진행되니 치명적이지 않다 |
 | push 422 | 로컬 검증을 건너뛴 것. `push_edition.py`가 출력한 필드 경로를 보고 수정 |
 | push 401 | `backend/.env`의 `ADMIN_API_KEY` 누락 |
-| push가 연결 거부되거나 엉뚱한 응답을 줌 | `--api`를 안 넘겨 기본값(`localhost:8002`, btc-daily-web)으로 갔다. `--api http://localhost:8003` 명시 |
+| push가 연결 거부되거나 엉뚱한 응답을 줌 | 백엔드가 8003에 안 떠 있거나 `--api`로 다른 주소를 넘겼다. `bash scripts/dev.sh backend` 후 재시도 |
 | 사이트에 안 뜸 | 프론트가 8003을 프록시하는지(`frontend/vite.config.ts`), 백엔드가 떠 있는지 확인 |
 | Q&A 다 실패 / GEMINI_API_KEY 없음 | `backend/.env`에 `GEMINI_API_KEY` 추가 필요. 일부만 실패는 정상 범위(카드별 독립) |
 | `recent_editions.py`가 "이전 발행분이 없다"로 종료 | 정상이다 — 발행 이력이 아직 없다는 뜻. 3.1절대로 건너뛰고 보고에 적는다 |

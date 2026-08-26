@@ -29,7 +29,10 @@ from app.wording import find_problems  # noqa: E402
 from scripts.collect_daily import apply_date_to_cover  # noqa: E402
 
 ENV_FILE = BACKEND_ROOT / ".env"
-DEFAULT_API = "http://localhost:8002"
+# 이 프로젝트의 로컬 백엔드다. 8002 는 btc-daily-web 이라 그대로 두면 AI 에디션이
+# 남의 DB 로 들어간다. 도메인이 정해지면 collect_daily.DEFAULT_EDITION_API 와 함께
+# 프로덕션 주소로 바꾼다(CONTENT_CONTRACT.md "도메인이 정해지면" 절).
+DEFAULT_API = "http://localhost:8003"
 
 
 def load_admin_api_key() -> str:
