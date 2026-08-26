@@ -1,0 +1,28 @@
+# 구현 진행 상황
+
+btc-daily-web 을 포크해 AI 카드뉴스로 전환한다. 드라이런(2026-08-26) 결과가 근거다:
+36시간 코퍼스 285건 · 매체 54곳으로 재료는 충분한데, 매체 간 중복(할라페뇨 한 사건 8건)과
+이미지 39% 두 가지가 그대로는 카드 10장을 못 만들게 막는다.
+
+## 완료된 Phase
+(없음)
+
+## 현재 진행 중
+- [ ] Phase 1: 포크 + 골격 (포트 8003/5176, DB·패키지명, git init)
+
+## 남은 Phase
+- [ ] Phase 2: 수집기 도메인 교체 (용어집 3벌, asset=ai, topic=AI)
+- [ ] Phase 3: 매체 간 중복 제거 — 사건 클러스터링
+- [ ] Phase 4: 이미지 확보 — 클러스터 내 이미지 승계
+- [ ] Phase 5: AI 인용구 풀 (ai_quotes.json)
+- [ ] Phase 6: 브랜드 · 테마 · 프론트
+- [ ] Phase 7: CLAUDE.md / CONTENT_CONTRACT / ai-daily 스킬
+- [ ] Phase 8: 린트 · 테스트 + 실제 수집 1회
+
+## 결정 사항
+| 항목 | 값 |
+|---|---|
+| 디렉토리 | `/Users/nsw/meeting_room/lab/ai-daily-web` |
+| 포트 | backend 8003 · frontend 5176 (btc 는 8002/5175) |
+| 배포 | 로컬만. DOMAIN 비움, nginx conf 는 `DOMAIN.conf` 로 자리만 유지 |
+| 표지 인용구 | AI · 컴퓨팅 인물 인용으로 새 풀 (초상화 없이 타이포그래피 아바타) |

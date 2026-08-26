@@ -1,0 +1,92 @@
+name: "CI"
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+  # push 이벤트가 유실돼 배포가 안 나가는 일이 있었다(8/6 푸시는 워크플로가
+  # 생성되지 않았다). 수동으로 같은 파이프라인을 다시 돌릴 수 있게 열어둔다.
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v7
+
+      - name: "Setup Python"
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: "Install dependencies"
+        run: pip install -r requirements.txt
+
+      - name: "Ruff lint"
+        run: ruff check .
+
+      # .env 없이 도는 환경 — config가 로컬 SQLite 기본값으로 떨어진다.
+      - name: "Pytest"
+        run: pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v7
+
+      - name: "Setup Node"
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: "Install dependencies"
+        run: npm ci
+
+      - name: "Lint"
+        run: npm run lint
+
+      - name: "Test"
+        run: npm run test
+
+      - name: "Build"
+        run: npm run build
+
+  deploy:
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, btc-daily-web]
+    timeout-minutes: 10
+
+    steps:
+      # self-hosted 러너가 이미 /home/measly/btc-daily-web에서 도는 컨테이너와
+      # 같은 서버에 있다 — actions/checkout으로 별도 워크스페이스에 받지 않고
+      # 배포용 클론 디렉토리를 직접 최신화한다 (.env·볼륨이 거기 있음).
+      - name: "Deploy (pull + rebuild + restart)"
+        run: |
+          set -euo pipefail
+          cd /home/measly/btc-daily-web
+          git fetch origin main
+          git pull --ff-only origin main
+          docker compose build backend web
+          docker compose up -d backend web
