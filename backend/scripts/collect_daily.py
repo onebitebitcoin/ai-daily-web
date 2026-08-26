@@ -923,7 +923,10 @@ def warn_video_drought(items: list[dict[str, Any]]) -> None:
             file=sys.stderr,
         )
     else:
-        print(f"WARNING: 창 안에 {VIDEO_TOPIC} 영상 후보가 없다 — 뉴스만으로 구성된다.", file=sys.stderr)
+        print(
+            f"WARNING: 창 안에 {VIDEO_TOPIC} 영상 후보가 없다 — 뉴스만으로 구성된다.",
+            file=sys.stderr,
+        )
 
 
 def apply_date_to_cover(cover_fixed: dict[str, Any], date: datetime.date) -> dict[str, Any]:
