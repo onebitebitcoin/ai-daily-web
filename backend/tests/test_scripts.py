@@ -993,6 +993,190 @@ def test_build_skeleton_generates_date_slug_title_and_sources() -> None:
     assert skeleton["closing"]["sources"] == ["A", "B"]
 
 
+# ---- collect_daily 원문 URL 복원 · og:image 보강 ----
+
+GNEWS_URL = collect_daily.GOOGLE_NEWS_ARTICLE + "CBMiTEST?oc=5"
+
+
+def gnews_interstitial(signature: str = "Ae5Wzi_sig", timestamp: str = "1787746684") -> str:
+    """구글 뉴스 인터스티셜 — 원문 대신 서명·타임스탬프만 심어서 준다."""
+    return (
+        '<!doctype html><html><body><c-wiz data-n-a-id="CBMiTEST" '
+        f'data-n-a-sg="{signature}" data-n-a-ts="{timestamp}"></c-wiz></body></html>'
+    )
+
+
+def garturlres(url: str) -> str:
+    """batchexecute 응답 — JSON 안에 JSON 문자열이 한 겹 더 들어 있는 구글 형식.
+
+    구글은 안쪽 문자열에서 `=` 를 \\u003d 로 이스케이프한다. 실제 응답과 같게
+    만들어 둬야 주소가 그 자리에서 잘리는 회귀를 잡는다.
+    """
+    inner = json.dumps(["garturlres", url, 1], ensure_ascii=False).replace("=", "\\u003d")
+    envelope = json.dumps(
+        [["wrb.fr", "Fbv4je", inner, None, None, None, ""], ["di", 15]], ensure_ascii=False
+    )
+    return ")]}'\n\n" + envelope
+
+
+def gnews_client(publisher_url: str, **overrides: Any) -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "news.google.com" and request.method == "POST":
+            return httpx.Response(200, text=garturlres(publisher_url))
+        return httpx.Response(200, text=gnews_interstitial(**overrides))
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_resolve_google_news_url_returns_the_publisher_url() -> None:
+    with gnews_client("https://www.seoul.co.kr/news/international/2026/08/26/20260826010007") as c:
+        resolved = collect_daily.resolve_google_news_url(c, GNEWS_URL)
+
+    assert resolved == "https://www.seoul.co.kr/news/international/2026/08/26/20260826010007"
+
+
+def test_resolve_google_news_url_keeps_the_query_string_intact() -> None:
+    """정규식으로 한 번에 긁던 시절 `=` 이스케이프 자리에서 주소가 잘렸다.
+
+    실측: aitimes.com 주소가 `?idxno` 까지만 남아 기사 대신 목록 페이지로 갔다.
+    구글은 응답 안쪽 JSON 문자열에서 `=` 를 \u003d 로 이스케이프한다.
+    """
+    target = "https://www.aitimes.com/news/articleView.html?idxno=214335"
+    with gnews_client(target) as c:
+        assert collect_daily.resolve_google_news_url(c, GNEWS_URL) == target
+
+
+def test_resolve_google_news_url_returns_none_without_a_signature() -> None:
+    """구글이 인터스티셜 형식을 바꾸면 조용히 포기한다 — 원래 주소가 그대로 남는다."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.method)
+        return httpx.Response(200, text="<html><body>no signature here</body></html>")
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as c:
+        assert collect_daily.resolve_google_news_url(c, GNEWS_URL) is None
+
+    assert calls == ["GET"]  # 서명이 없으면 RPC 는 두드리지 않는다
+
+
+def test_resolve_google_news_url_returns_none_on_http_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as c:
+        assert collect_daily.resolve_google_news_url(c, GNEWS_URL) is None
+
+
+def og_client(html: str) -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=html)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_og_image_url_reads_the_og_image_tag() -> None:
+    html = '<html><head><meta property="og:image" content="https://img.example/a.jpg" /></head>'
+
+    with og_client(html) as c:
+        assert collect_daily.og_image_url(c, "https://news.example/1") == "https://img.example/a.jpg"
+
+
+def test_og_image_url_absolutizes_a_relative_path() -> None:
+    html = '<html><head><meta property="og:image" content="/photo/a.jpg" /></head>'
+
+    with og_client(html) as c:
+        image = collect_daily.og_image_url(c, "https://news.example/section/1")
+
+    assert image == "https://news.example/photo/a.jpg"
+
+
+def test_og_image_url_falls_back_to_twitter_image() -> None:
+    html = '<html><head><meta name="twitter:image" content="https://img.example/t.jpg"></head>'
+
+    with og_client(html) as c:
+        assert collect_daily.og_image_url(c, "https://news.example/1") == "https://img.example/t.jpg"
+
+
+def test_og_image_url_returns_none_when_the_page_has_no_image_meta() -> None:
+    with og_client("<html><head><title>기사</title></head>") as c:
+        assert collect_daily.og_image_url(c, "https://news.example/1") is None
+
+
+def test_enrich_candidates_swaps_the_redirect_and_keeps_the_original() -> None:
+    items = [make_news(source_ref="서울신문", url=GNEWS_URL)]
+
+    result = collect_daily.enrich_candidates(
+        items,
+        lambda url: "https://www.seoul.co.kr/news/1",
+        lambda url: "https://img.seoul.co.kr/1.jpg",
+    )
+
+    assert result[0]["url"] == "https://www.seoul.co.kr/news/1"
+    assert result[0]["google_url"] == GNEWS_URL
+    # 이미지는 되돌린 주소에서 가져온다 — 리디렉션 페이지에는 기사 사진이 없다.
+    assert result[0]["image_url"] == "https://img.seoul.co.kr/1.jpg"
+
+
+def test_enrich_candidates_fills_only_the_items_without_an_image() -> None:
+    items = [
+        make_news(source_ref="있음", url="https://news.example/1", image_url="https://img/a.jpg"),
+        make_news(source_ref="없음", url="https://news.example/2"),
+    ]
+    asked: list[str] = []
+
+    def fetch_image(url: str) -> str:
+        asked.append(url)
+        return "https://img/b.jpg"
+
+    result = collect_daily.enrich_candidates(items, lambda url: None, fetch_image)
+
+    assert asked == ["https://news.example/2"]
+    assert result[0]["image_url"] == "https://img/a.jpg"
+    assert result[1]["image_url"] == "https://img/b.jpg"
+
+
+def test_enrich_candidates_leaves_the_item_alone_when_both_lookups_fail() -> None:
+    """보강은 있으면 좋은 것이다 — 실패해도 후보를 버리거나 바꾸지 않는다."""
+    items = [make_news(source_ref="A", url=GNEWS_URL)]
+
+    result = collect_daily.enrich_candidates(items, lambda url: None, lambda url: None)
+
+    assert result[0]["url"] == GNEWS_URL
+    assert "google_url" not in result[0]
+    assert result[0].get("image_url") is None
+
+
+def test_enrich_candidates_does_not_mutate_input_items() -> None:
+    items = [make_news(source_ref="A", url=GNEWS_URL)]
+    before = [dict(n) for n in items]
+
+    collect_daily.enrich_candidates(
+        items, lambda url: "https://news.example/1", lambda url: "https://img/a.jpg"
+    )
+
+    assert items == before
+
+
+def test_filter_news_enriches_before_image_dedupe() -> None:
+    """보강으로 채운 이미지도 최근 발행분과 대조돼야 한다.
+
+    순서가 뒤집히면(중복배제 -> 보강) 어제 쓴 사진이 오늘 카드에 그대로 다시 실린다.
+    """
+    recent = 1234
+    items = [make_news(source_ref="A", url="https://news.example/1")]
+
+    result = collect_daily.filter_news(
+        items,
+        NOW,
+        exclude_image_hashes=[recent],
+        hash_image=lambda url: recent,
+        enrich=lambda picked: [{**n, "image_url": "https://img/dup.jpg"} for n in picked],
+    )
+
+    assert result[0]["image_url"] is None
+
+
 # ---- collect_daily.main (httpx.MockTransport) ----
 
 

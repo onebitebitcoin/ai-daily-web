@@ -57,9 +57,10 @@ cd backend && source .venv/bin/activate && python scripts/collect_daily.py
 이 스킬에 수치를 인용할 일이 있으면 아래 것만 써라):
 
 ```
+source enrich: 리디렉션 45건 중 45건 복원 · 이미지 없던 59건 중 58건 보강
 news candidates: 100 — ai 89 / industry 11 / other 0
 event folding: 42건을 접어 사건 100개 — 가장 큰 사건 7매체
-image coverage: 41/100 (41%)
+image coverage: 99/100 (99%)
 video candidates: 15 — 최근 3일 발행분 0건 제외
 trending pool: news 177 / videos 15 -> 15 topics
 trending corpus: 뉴스 177건 54매체 · 유튜브 15건 14채널 집계
@@ -67,7 +68,8 @@ cover quote: wiener-purpose-put-into-the-machine (노버트 위너) — 최근 0
 ```
 
 ("최근 0개 제외" 두 곳은 이 실측 당시 발행 이력이 없어서다. 이력이 쌓인
-뒤에는 그 자리 숫자가 올라간다 — 3.1절 참고.)
+뒤에는 그 자리 숫자가 올라간다 — 3.1절 참고. `source enrich`/`image coverage`
+값은 같은 후보 100건에 보강 단계만 다시 돌려 잰 것이다.)
 
 draft 구조:
 
@@ -83,6 +85,10 @@ draft 구조:
 - `candidates.news[]` — 최근 **36h** AI 기사 최대 100건. 관련도 등급(`relevance`)
   → 화제성 → 최신순으로 정렬돼 있다. 각 항목에 `cluster_size`/`also_covered_by`/
   `cluster_titles`가 붙어 있다 — 3.0.1절이 이 필드를 쓴다.
+  `url`은 **매체 원문 주소**다. 후보의 절반 가까이가 googlenews 경유로 들어오는데
+  (`news.google.com/rss/articles/...`) 수집기가 원문으로 되돌려 놓는다. 되돌린
+  항목에는 `google_url`에 원래 리디렉션 주소가 남아 있다. 되돌리기가 실패하면
+  `url`이 리디렉션 주소 그대로다 — 그런 후보는 카드 링크로 쓰지 마라.
 - `candidates.videos[]` — 최근 **48h** AI 유튜브(응답의 `topic` 필드가 "AI"인 것)
   최대 15건 (조회수 순)
 - `trending_candidates[]` — 트렌딩 토픽 후보 상위 15개 (5.1에서 쓴다)
@@ -185,13 +191,16 @@ draft 구조:
 같은 편을 이유 없이 건너뛰지 마라 — 조회수 상위가 전부 모델 소식이면 그날
 카드 전체가 모델 얘기로만 쏠릴 수 있다.
 
-#### 3.0.5. 이미지가 부족하다
+#### 3.0.5. 이미지가 없는 후보
 
-googlenews 경유 기사가 `image_url` 없이 들어와, 최종 후보 100건 중 이미지가
-붙은 건 41건(41%)뿐이다(2026-08-26 실측). `collapse_events`가 사건 군 안에서
-이미지 있는 기사를 대표로 올려주긴 하지만, 그래도 하루 10장 중 몇 장은 이미지를
-못 채울 수 있다는 뜻이다. 후보 순위가 높아도 이미지가 없으면 5.0절의 이미지
-순서를 그대로 밟고, 안 되면 `media: null`로 낸다 — 가짜 이미지를 붙이지 마라.
+my-news가 주는 `image_url`은 후보 100건 중 41건에만 붙어 있었다 — googlenews
+경유 기사가 이미지 없이 들어오기 때문이다. 수집기가 원문 주소를 되돌린 뒤
+**기사 `<head>`의 `og:image`를 채워** 99건까지 올린다(2026-08-26 실측).
+
+그래도 남는 몇 건이 있고, **채워진 이미지가 그 기사에 맞는지는 별개 문제다.**
+`og:image`는 매체가 그 기사에 직접 붙인 대표 이미지라 출처는 어긋나지 않지만,
+인포그래픽이거나 범용 사진일 수 있다. 5.0절 순서를 그대로 밟고 눈으로 확인해라.
+끝내 없으면 `media: null`로 낸다 — 가짜 이미지를 붙이지 마라.
 
 ### 3.1. 최근 발행분 대비 중복 점검
 

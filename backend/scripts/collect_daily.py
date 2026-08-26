@@ -27,6 +27,7 @@ import re
 import sys
 import urllib.parse
 from collections.abc import Callable, Collection
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -416,6 +417,248 @@ def get_image_hash(client: httpx.Client, url: str, cache: dict[str, int]) -> int
     return digest
 
 
+# ---- 원문 URL 복원 · 대표 이미지 보강 ----
+#
+# 후보의 절반 가까이가 googlenews 경유로 들어온다 — url 이 news.google.com
+# 리디렉션이고 image_url 은 비어 있다(2026-08-26 실측: 후보 100건 중 45건이
+# 그랬고, 이미지 없는 59건 중 45건이 이쪽이다). 그대로 두면 카드의 "원문" 링크가
+# 리디렉션 주소가 되고 이미지는 채울 방법이 없다. 실제로 2026-08-26 발행분은
+# 카드 4장이 매체 홈페이지 링크에 기본 아트로 나갔다.
+#
+# 그래서 최종 후보에 한해 둘을 채운다.
+#   1. 구글 뉴스 리디렉션 -> 매체 원문 URL
+#   2. image_url 이 빈 후보 -> 원문 <head> 의 og:image
+# 둘 다 실패하면 원래 값을 그대로 남긴다. 있으면 좋은 보강이지 06:00 배치를
+# 죽일 이유가 아니다. 최종 후보(NEWS_LIMIT)에만 거는 건 원본 500건을 전부
+# 두드리면 느리고 낭비라서다 — 이미지 해시와 같은 이유다.
+
+GOOGLE_NEWS_ARTICLE = "https://news.google.com/rss/articles/"
+GOOGLE_NEWS_RPC = "https://news.google.com/_/DotsSplashUi/data/batchexecute"
+# 구글은 브라우저 UA 가 아니면 인터스티셜에 서명을 심어주지 않는다.
+BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+SOURCE_FETCH_TIMEOUT = 12.0
+# 동시 요청 수. 5 면 이미지 없는 후보 59건이 실측 15초 안쪽이고 매체 한 곳에
+# 몰아치지도 않는다.
+SOURCE_ENRICH_WORKERS = 5
+# og:image 는 <head> 에 있다. 본문까지 읽을 이유가 없다.
+OG_HEAD_BYTES = 200_000
+# 수집 본체는 my-news/my-youtube 만 보므로 리디렉션을 안 따라가지만, 매체 원문은
+# 거의 항상 리디렉션을 탄다. 클라이언트를 따로 만들지 않고 요청 단위로 얹는다 —
+# 그래야 호출자가 넘긴 클라이언트를 그대로 쓴다(테스트가 MockTransport 로 가로챈다).
+_SOURCE_REQUEST: dict[str, Any] = {
+    "headers": {"User-Agent": BROWSER_UA},
+    "follow_redirects": True,
+    "timeout": SOURCE_FETCH_TIMEOUT,
+}
+SOURCE_URL_CACHE_PATH = BACKEND_ROOT / ".cache" / "source-url" / "cache.json"
+OG_IMAGE_CACHE_PATH = BACKEND_ROOT / ".cache" / "og-image" / "cache.json"
+
+_GNEWS_SIGNATURE = re.compile(r'data-n-a-sg="([^"]+)"')
+_GNEWS_TIMESTAMP = re.compile(r'data-n-a-ts="(\d+)"')
+_OG_IMAGE_TAG = re.compile(
+    r"""<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)(?::src)?["'][^>]*>""",
+    re.IGNORECASE,
+)
+_OG_CONTENT = re.compile(r"""content=["']([^"']+)["']""", re.IGNORECASE)
+
+
+def _load_str_cache(path: Path) -> dict[str, str]:
+    """url -> url 캐시. 없거나 손상됐으면 빈 캐시로 시작한다(치명적이지 않다)."""
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return {str(key): str(value) for key, value in raw.items()}
+    except (OSError, json.JSONDecodeError, ValueError, AttributeError):
+        return {}
+
+
+def _save_str_cache(path: Path, cache: dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError as exc:
+        print(f"경고: 캐시 저장 실패 ({path.name}): {exc!r}", file=sys.stderr)
+
+
+def _cached(cache: dict[str, str], key: str, produce: Callable[[], str | None]) -> str | None:
+    """성공한 결과만 캐시에 남긴다 — 실패는 다음 실행에서 다시 시도되게."""
+    if key in cache:
+        return cache[key]
+    value = produce()
+    if value:
+        cache[key] = value
+    return value
+
+
+def resolve_google_news_url(client: httpx.Client, url: str) -> str | None:
+    """구글 뉴스 리디렉션 주소를 매체 원문 URL 로 되돌린다.
+
+    주소 안에 원문이 인코딩돼 있지 않다 — 예전 형식은 base64 였지만 지금은
+    아니다. 인터스티셜 HTML 에 심긴 서명(`data-n-a-sg`)과 타임스탬프를 구글
+    내부 RPC 에 되던져야 원문이 나온다. 구글이 이 흐름을 바꾸면 여기서 None 이
+    나오고 호출자는 원래 주소를 그대로 쓴다 — 링크가 리디렉션으로 남을 뿐
+    수집은 계속된다.
+    """
+    article_id = url.split("/articles/", 1)[-1].split("?", 1)[0]
+    if not article_id or article_id == url:
+        return None
+    try:
+        page = client.get(url, **_SOURCE_REQUEST)
+        page.raise_for_status()
+        signature = _GNEWS_SIGNATURE.search(page.text)
+        timestamp = _GNEWS_TIMESTAMP.search(page.text)
+        if not (signature and timestamp):
+            return None
+        request = [
+            "Fbv4je",
+            json.dumps(
+                [
+                    "garturlreq",
+                    [
+                        ["X", "X", ["X", "X"], None, None, 1, 1, "US:en", None, 1]
+                        + [None, None, None, None, None, 0, 1],
+                        "X",
+                        "X",
+                        1,
+                        [1, 1, 1],
+                        1,
+                        1,
+                        None,
+                        0,
+                        0,
+                        None,
+                        0,
+                    ],
+                    article_id,
+                    int(timestamp.group(1)),
+                    signature.group(1),
+                ]
+            ),
+        ]
+        response = client.post(
+            GOOGLE_NEWS_RPC,
+            data={"f.req": json.dumps([[request]])},
+            headers={
+                "User-Agent": BROWSER_UA,
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            },
+            timeout=SOURCE_FETCH_TIMEOUT,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        print(f"경고: 구글 뉴스 원문 복원 실패, 건너뜀 ({exc!r})", file=sys.stderr)
+        return None
+    return _parse_garturlres(response.text)
+
+
+def _parse_garturlres(body: str) -> str | None:
+    """batchexecute 응답에서 원문 URL 을 꺼낸다.
+
+    응답은 `)]}'` 로 시작하는 줄 뒤에 JSON 이 이어지는 구글 특유의 형식이고,
+    원문 URL 은 그 안에 **문자열로 한 번 더 인코딩된** JSON 안에 들어 있다.
+    정규식으로 한 번에 긁으면 `=` 가 `\u003d` 로 이스케이프된 자리에서 잘린다
+    (실측: aitimes.com 주소가 `?idxno` 에서 끊겼다) — 그래서 두 겹 다 파싱한다.
+    """
+    for line in body.splitlines():
+        if "garturlres" not in line:
+            continue
+        try:
+            envelope = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        for row in envelope:
+            if isinstance(row, list) and len(row) > 2 and row[0] == "wrb.fr":
+                try:
+                    payload = json.loads(row[2])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if len(payload) > 1 and isinstance(payload[1], str):
+                    return payload[1]
+    return None
+
+
+def og_image_url(client: httpx.Client, url: str) -> str | None:
+    """기사 <head> 의 og:image(없으면 twitter:image)를 절대 URL 로 돌려준다.
+
+    이게 "기사 본문 실사진"에 가장 가까운 자동 수단이다 — 매체가 그 기사의
+    대표 이미지로 직접 지정한 것이라, 다른 기사 사진을 빌려 오는 사고가 없다.
+    """
+    try:
+        response = client.get(url, **_SOURCE_REQUEST)
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        print(f"경고: 원문 og:image 조회 실패, 건너뜀 ({url}): {exc!r}", file=sys.stderr)
+        return None
+    for tag in _OG_IMAGE_TAG.findall(response.text[:OG_HEAD_BYTES]):
+        content = _OG_CONTENT.search(tag)
+        if content and content.group(1).strip():
+            return urllib.parse.urljoin(str(response.url), content.group(1).strip())
+    return None
+
+
+def enrich_candidates(
+    items: list[dict[str, Any]],
+    resolve_url: Callable[[str], str | None],
+    fetch_image: Callable[[str], str | None],
+    workers: int = SOURCE_ENRICH_WORKERS,
+) -> list[dict[str, Any]]:
+    """후보의 url 을 매체 원문으로 되돌리고, 이미지가 빈 후보에 og:image 를 채운다.
+
+    되돌린 주소는 `url` 에 넣고 원래 리디렉션 주소는 `google_url` 로 남긴다.
+    items 와 그 안의 dict 를 변형하지 않는다.
+    """
+    redirects = sum(1 for n in items if str(n.get("url") or "").startswith(GOOGLE_NEWS_ARTICLE))
+    missing = sum(1 for n in items if not n.get("image_url"))
+
+    def enrich(news: dict[str, Any]) -> dict[str, Any]:
+        url = str(news.get("url") or "")
+        patch: dict[str, Any] = {}
+        if url.startswith(GOOGLE_NEWS_ARTICLE):
+            resolved = resolve_url(url)
+            if resolved:
+                patch["url"] = resolved
+                patch["google_url"] = url
+                url = resolved
+        if url and not news.get("image_url"):
+            image = fetch_image(url)
+            if image:
+                patch["image_url"] = image
+        return {**news, **patch} if patch else news
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        enriched = list(pool.map(enrich, items))
+
+    restored = sum(1 for n in enriched if n.get("google_url"))
+    filled = sum(
+        1
+        for before, after in zip(items, enriched, strict=True)
+        if not before.get("image_url") and after.get("image_url")
+    )
+    print(
+        f"source enrich: 리디렉션 {redirects}건 중 {restored}건 복원 · "
+        f"이미지 없던 {missing}건 중 {filled}건 보강"
+    )
+    return enriched
+
+
+def enrich_with_network(
+    items: list[dict[str, Any]],
+    client: httpx.Client,
+    url_cache: dict[str, str],
+    image_cache: dict[str, str],
+) -> list[dict[str, Any]]:
+    """enrich_candidates 를 실제 네트워크와 디스크 캐시에 묶는다."""
+    return enrich_candidates(
+        items,
+        lambda url: _cached(url_cache, url, lambda: resolve_google_news_url(client, url)),
+        lambda url: _cached(image_cache, url, lambda: og_image_url(client, url)),
+    )
+
+
 # 화제성 우선권을 줄 트렌딩 토픽 수. rank_topics 는 상위 15개를 내는데, 그 꼬리는
 # 매체 한 곳이 한 번 언급한 수준이라 "여러 매체가 동시에 다뤘다"는 신호가 약하다.
 TRENDING_PRIORITY_TOPICS = 8
@@ -682,6 +925,7 @@ def filter_news(
     exclude_image_hashes: Collection[int] = (),
     hash_image: Callable[[str], int | None] | None = None,
     priority_urls: Collection[str] = (),
+    enrich: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """NEWS_WINDOW_HOURS 창을 통과한 기사를 관련도 순으로, 시간대별로 고르게 뽑는다.
 
@@ -706,8 +950,14 @@ def filter_news(
     **사건(접기).** 창을 통과한 직후 collapse_events 로 같은 사건을 한 건으로
     접는다. 상한을 세기 전에 접어야 "서로 다른 사건 100건"이 된다.
 
+    **보강(enrich).** 최종 후보가 정해진 뒤 한 번 부른다(보통 enrich_with_network).
+    구글 뉴스 리디렉션을 매체 원문 URL 로 되돌리고 이미지가 빈 후보에 og:image 를
+    채우는 자리다 — 이미지 중복배제보다 **먼저** 걸어야 새로 채운 이미지도 최근
+    발행분과 대조된다. 안 넘기면(기본값) 보강 없이 예전과 동일하게 동작한다.
+
     돌려주는 각 항목에는 `relevance` 와 `cluster_size`/`also_covered_by`/
-    `cluster_titles` 가 붙는다(카드 10장을 고를 때 쓴다).
+    `cluster_titles` 가 붙는다(카드 10장을 고를 때 쓴다). 보강으로 주소를 되돌린
+    항목에는 `google_url` 도 붙는다.
 
     exclude_image_hashes(recent_image_hashes)와 hash_image(url -> average hash,
     보통 get_image_hash 를 클라이언트/캐시에 바인딩한 클로저)가 둘 다 주어지면,
@@ -757,6 +1007,9 @@ def filter_news(
             -_parse_dt(n["crawled_at"]).timestamp(),
         )
     )
+
+    if enrich is not None:
+        picked = enrich(picked)
 
     if hash_image is not None:
         picked = _dedupe_image_urls(picked, exclude_image_hashes, hash_image)
@@ -1175,6 +1428,8 @@ def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> P
         used_quote_ids = recent_quote_ids(client, args.edition_api, date, len(quote_pool))
         used_video_ids = recent_video_ids(client, args.edition_api, date, RECENT_VIDEO_DAYS)
         image_hash_cache = _load_image_hash_cache()
+        source_url_cache = _load_str_cache(SOURCE_URL_CACHE_PATH)
+        og_image_cache = _load_str_cache(OG_IMAGE_CACHE_PATH)
         used_image_hashes = recent_image_hashes(
             client, args.edition_api, date, RECENT_IMAGE_DAYS, image_hash_cache
         )
@@ -1203,8 +1458,13 @@ def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> P
             used_image_hashes,
             lambda url: get_image_hash(client, url, image_hash_cache),
             hot_urls,
+            lambda picked: enrich_with_network(
+                picked, client, source_url_cache, og_image_cache
+            ),
         )
         _save_image_hash_cache(image_hash_cache)
+        _save_str_cache(SOURCE_URL_CACHE_PATH, source_url_cache)
+        _save_str_cache(OG_IMAGE_CACHE_PATH, og_image_cache)
     finally:
         if owns_client:
             client.close()
