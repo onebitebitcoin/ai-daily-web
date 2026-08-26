@@ -1,9 +1,10 @@
 # CONTENT_CONTRACT — 에디션 JSON 계약
 
-`btc-daily-web`이 `POST /api/editions`로 받는 JSON의 실제 계약이다. 원본
-카드뉴스 템플릿 문서(`reference/template-field-reference.md`)를 베이스로 하되,
-이 프로젝트의 `backend/app/schemas.py`(pydantic, `extra="forbid"`)가 강제하는
-실제 델타를 반영한다. **스키마와 이 문서가 다르면 스키마가 맞다** —
+`ai-daily-web`이 `POST /api/editions`로 받는 JSON의 실제 계약이다. `btc-daily-web`을
+포크해 만든 프로젝트라 구조는 같고, 도메인 용어집·인용구 풀·후보 클러스터링만
+다르다. 원본 카드뉴스 템플릿 문서(`reference/template-field-reference.md`)를
+베이스로 하되, 이 프로젝트의 `backend/app/schemas.py`(pydantic, `extra="forbid"`)가
+강제하는 실제 델타를 반영한다. **스키마와 이 문서가 다르면 스키마가 맞다** —
 `backend/app/schemas.py`를 최종 소스로 본다.
 
 ## 1. 필드 표 (실제 스키마 기준)
@@ -22,11 +23,11 @@
 | | `mark` | list[str] | ✓ | 줄바꿈 배열 |
 | | `meta` | list[str] | ✓ | 관례상 3개(수집기간/소스/날짜) |
 | | `hint` | str | ✓ | |
-| | `quote` | object \| null | | **선택 블록.** 표지 하단에 나가는 그날의 오스트리아학파 인용구. 07-27~08-07 발행분에는 없다. `collect_daily.py`가 자동으로 채우니 손으로 쓰지 마라 |
-| | `quote.id` | str | quote 있으면 ✓ | `austrian_quotes.json`의 id. 렌더에 쓰이지 않지만 **다음 날 중복 회피가 이 값을 되읽는다** |
-| | `quote.text` | str | quote 있으면 ✓ | 한국어 번역. 인용문이라 [2.1절](#21-어미--body와-quote는-했습니다체-2026-08-07-발행분부터)의 했습니다체 규칙에서 제외 |
-| | `quote.author` | str | quote 있으면 ✓ | 예: `"루트비히 폰 미제스"` |
-| | `quote.portrait` | str \| null | | 번들 초상 stem. null이면 이름을 조판한 아바타, [4장](#4-이미지-규칙) 참고 |
+| | `quote` | object \| null | | **선택 블록(스키마상 optional).** 표지 하단에 나가는 그날의 AI·컴퓨팅 인물 인용구. `collect_daily.py`가 매 발행 자동으로 채우니 손으로 쓰지 마라 |
+| | `quote.id` | str | quote 있으면 ✓ | `ai_quotes.json`의 id. 렌더에 쓰이지 않지만 다음 날 중복 회피가 이 값을 되읽는다 |
+| | `quote.text` | str | quote 있으면 ✓ | 한국어 번역. 인용문이라 [2.1절](#21-어미--body와-quote는-했습니다체)의 했습니다체 규칙에서 제외 |
+| | `quote.author` | str | quote 있으면 ✓ | 예: `"앨런 튜링"` |
+| | `quote.portrait` | str \| null | | 번들 초상 stem. null이면 이름을 조판한 아바타, [5.1절](#51-표지-인용구의-화자-초상-coverquoteportrait) 참고 |
 | `cards` | `num` | int | ✓ | |
 | | `chip.text` | str | ✓ | |
 | | `chip.emphasis` | `"primary"` \| `"secondary"` \| null | | |
@@ -37,7 +38,7 @@
 | | `body` | str | ✓ | |
 | | `quote` | str \| null | | |
 | | `link.label`, `link.href` | str | link 있으면 둘 다 ✓ | 없으면 `link: null` |
-| | `media.image` | str | media 있으면 ✓ | stem 또는 URL, [4장](#4-이미지-규칙) 참고 |
+| | `media.image` | str | media 있으면 ✓ | stem 또는 URL, [5장](#5-이미지-규칙) 참고 |
 | | `media.href`, `media.cta` | str \| null | | 없으면 `media: null` |
 | `closing` | `eyebrow` | str | ✓ | |
 | | `mark_lines` | list[str] | ✓ | 마지막 줄만 강조색 |
@@ -46,7 +47,7 @@
 | | `restart` | str | ✓ | |
 | | `sources` | list[str] | ✓ | 실제 수집된 `source_ref` 유니크 목록 |
 | | `disclaimer` | str | ✓ | 면책 문구 |
-| `trending` | — | object \| null | | **선택 블록.** 없으면 슬라이드 12장(표지+카드10+클로징), 있으면 클로징 앞에 트렌딩 슬라이드가 끼어 13장. 기존 발행분 9편에는 없다 |
+| `trending` | — | object \| null | | **선택 블록(스키마상 optional).** 없으면 슬라이드 12장(표지+카드10+클로징), 있으면 클로징 앞에 트렌딩 슬라이드가 끼어 13장 |
 | | `eyebrow` | str | trending 있으면 ✓ | |
 | | `title` | str | trending 있으면 ✓ | |
 | | `note` | str \| null | | 40자 이내 한 줄. draft의 `trending_corpus.note`를 그대로 복사한다 (예: `"뉴스 205건 12매체 · 유튜브 18건 17채널 집계"`) |
@@ -61,88 +62,141 @@
 | | `items[].links[].href` | str | ✓ | 원문 URL |
 | | `items[].links[].source` | str \| null | | 매체명. 제목 아래 작게 붙는다 |
 
-`trending`은 **단순 언급 빈도가 아니라 "무엇이 진짜 핫했는가"**를 보여주는 게
+`trending`은 단순 언급 빈도가 아니라 "무엇이 진짜 핫했는가"를 보여주는 게
 목적이다. `backend/app/trending.py`의 `rank_topics`가 매체 다양성에 지수를 줘
 계산하고(같은 매체가 5번 쓴 것보다 매체 5곳이 한 번씩 다룬 게 더 핫하다),
 `collect_daily.py`가 상위 15개를 draft의 `trending_candidates`에 남기면
-`.claude/skills/btc-daily/SKILL.md` 5.1단계에서 사람(Claude)이 겹치는 토픽을
+`.claude/skills/ai-daily/SKILL.md` 5.1단계에서 사람(Claude)이 겹치는 토픽을
 10개로 병합·라벨링해 이 블록을 만든다.
 
 `note`에 들어갈 집계 규모는 같은 스크립트가 `trending_corpus`로 함께 남긴다.
-문구는 Claude가 쓰지만 **이 숫자만은 세는 것이지 쓰는 게 아니라서**, draft에
-없으면 무인 발행이 "N건 집계"를 지어내게 된다.
+문구는 Claude가 쓰지만 이 숫자는 세어서 옮기는 값이다 — draft에 없으면 무인
+발행이 "N건 집계"를 지어내게 된다.
 
 ## 2. 톤 가이드
 
-`reference/content.json`의 실제 카드 패턴을 따른다:
+`frontend/src/fixtures/content.json`의 실제 카드 패턴을 따른다 —
+`reference/content.json`은 원본 카드뉴스 템플릿의 스키마 테스트용 btc-daily-web
+표본이라 브랜드가 다르고(`CLAUDE.md`의 "reference/ 디렉토리" 참고), 톤 기준으로는
+쓰지 않는다:
 
-- **`quote`**: 12자 내외 임팩트 한 줄. ("금리는 멈췄는데, 시장은 안 멈췄습니다.")
-- **`title`**: 펀치라인형 헤드라인, 한 문장. **명사로 끝낸다** — 2.1절 참고.
-  ("연준 금리 동결에도 밀린 비트코인")
-- **`subtitle`**: 영문 요약, `title`의 짧은 재진술. ("Fed Holds, BTC Slides")
-- **`chips`**: 정확히 3개, `#`로 시작하는 키워드.
-- **`body`**: 200자 내외. 무슨 일이 있었는지 → 왜 중요한지 순서로 2~3문장.
+- **`quote`**: 사실을 요약하지 않고 해석을 얹는 한 문장(fixture 카드 6개 평균 39자).
+  ("시장 규모를 크게 그리는 것과 그 시장을 가져오는 것은 다른 일입니다.")
+- **`title`**: 펀치라인형 헤드라인, 한 문장(fixture 평균 25자 안팎). **명사로
+  끝낸다** — 2.1.1절 참고. ("오픈웨이트로 지키려다 뚫린 허깅페이스")
+- **`subtitle`**: 영문 요약, `title`의 짧은 재진술. ("The Open-Weight Paradox")
+- **`chips`**: 정확히 3개, `#`로 시작하는 키워드. ("#허깅페이스" "#오픈웨이트" "#보안")
+- **`body`**: 130자 안팎(fixture 10장 평균). 무슨 일이 있었는지 → 왜 중요한지
+  순서로 2~3문장.
 - **`link`**: 원문 기사/영상 URL. 후보에 없으면 카드 자체를 스킵.
 
-### 2.1. 어미 — `body`와 `quote`는 했습니다체 (2026-08-07 발행분부터)
+### 2.1. 어미 — `body`와 `quote`는 했습니다체
 
 읽는 사람에게 말을 거는 자리라 평서체("~했다", "~이다")는 딱딱하다. **`body`와
 `quote`는 `-습니다`/`-ㅂ니다`로 끝낸다.** 이미 습니다체인 `qa[].answer`와도 톤이 맞는다.
 
 | 필드 | 어미 | 예 |
 |---|---|---|
-| `body` | 했습니다체 | "…분수령입니다." / "…봤습니다." |
-| `quote` | 했습니다체 | "지지선이 버티는 동안은 아직 하락장이 아닙니다." |
+| `body` | 했습니다체 | "…엔비디아 블랙웰을 앞섰다고 밝혔습니다." / "…나스닥도 0.76% 내렸습니다." |
+| `quote` | 했습니다체 | "웹의 독자가 사람에서 에이전트로 옮겨가는 속도가 숫자로 찍혔습니다." |
 | `qa[].answer` | 했습니다체 | (Gemini가 이미 이렇게 생성한다) |
-| `title` | **명사형 종결** | "박스권 상단을 다시 두드린 비트코인" |
-| `subtitle` | 영문 | "Bitcoin Retests the Range Top" |
+| `title` | **명사형 종결** | "오르막에서는 안 보이던 실적 하루 전, 7거래일 연속 밀린 엔비디아" |
+| `subtitle` | 영문 | "Nvidia Slides Into Earnings" |
 
 `title`은 헤드라인이라 어미 규칙에서 빠진다 — 습니다체로 늘이면 카드뉴스 제목
 관례에서 벗어나고 줄이 길어진다.
 
-### 2.1.1. 제목은 명사로 끝낸다 (2026-08-18 발행분부터)
+첫 발행부터 적용된다 — `backend/app/wording.py`의 `EFFECTIVE_DATE`가
+`datetime.date.min`으로 고정돼 있어 발효일 예외가 없다.
+
+### 2.1.1. 제목은 명사로 끝낸다
 
 실제 뉴스 헤드라인은 서술형으로 끝나지 않는다. `title`도 같은 관례를 따라
 **체언(명사·명사구)으로 끝맺는다.**
 
 | 쓰지 말 것 | 쓸 것 |
 |---|---|
-| "비트코인이 6만4000달러를 되찾았다" | "6만4000달러를 되찾은 비트코인" |
-| "인증을 미룬 계정은 30일 뒤 청산된다" | "인증 미룬 계정에 걸린 30일 시한" |
-| "통제권은 어디로 가는가" | "토큰화가 바꾸지 못하는 것" |
+| "오픈AI가 브로드컴과 함께 자체 칩을 만들었다" | "엔비디아 블랙웰을 앞섰다는 오픈AI 첫 자체 칩" |
+| "허깅페이스가 오픈웨이트 모델 때문에 해킹당했다" | "오픈웨이트로 지키려다 뚫린 허깅페이스" |
+| "AI 에이전트가 웹의 새 독자가 됐는가" | "1년 새 1700% 늘어난 AI 에이전트 트래픽" |
 
 - 서술형 종결(`~다`/`~한다`/`~했다`/`~이다`)과 의문형 종결(`~는가`/`~인가`/`~까`)을
-  쓰지 않는다. 앞선 발행분 230장 중 77%가 `~다`로 끝나 제목이 매일 같은 리듬으로
-  읽혔다 — 명사형은 그 단조로움을 깨는 장치이기도 하다.
-- 관형절로 주어를 수식해 끝내는 형태가 기본이다("…한 비트코인", "…을 노린 유출").
-- 대구를 쓸 때는 쉼표로 끊고 뒤를 명사로 닫는다("매수 멈춘 스트래티지, 반등 만든 파생상품").
-- `push_edition.py`의 문구 게이트가 `TITLE_RULE_DATE`(2026-08-18) 이후 발행분에
-  한해 이 규칙을 강제한다. 그 이전 발행분은 서술형이라 소급 적용하지 않는다.
+  쓰지 않는다. 이 규칙은 `btc-daily-web`에서 관찰된 것이다 — 발행분 230장 중
+  77%가 `~다`로 끝나 제목이 매일 같은 리듬으로 읽혔다. 명사형은 그 단조로움을
+  깨는 장치이기도 하다.
+- 관형절로 주어를 수식해 끝내는 형태가 기본이다("…앞선 오픈AI 첫 자체 칩",
+  "…을 노린 데이터센터 해킹").
+- 대구를 쓸 때는 쉼표로 끊고 뒤를 명사로 닫는다("실적 하루 전 밀린 엔비디아,
+  사전학습 끝낸 차세대 모델").
+- `push_edition.py`의 문구 게이트(`app/wording.py`)가 첫 발행부터 이 규칙을
+  강제한다 — `TITLE_RULE_DATE`도 `EFFECTIVE_DATE`와 같은 이유로
+  `datetime.date.min`이라 소급 적용을 걱정할 발행 이력 자체가 없다.
 
 ### 2.2. 표기 용어집
 
 번역·음차가 갈리는 고유명사는 여기 적힌 쪽으로 통일한다. 후보 데이터(`summary`)의
 표기가 달라도 이 표를 따른다 — 수집원마다 제각각이라 그대로 쓰면 날마다 흔들린다.
+`backend/app/wording.py`의 `BANNED_TERMS`와 정확히 같은 내용이다.
 
-| 원문 | 쓸 표기 | 쓰지 말 것 |
+| 쓰지 말 것 | 쓸 표기 | 근거 |
 |---|---|---|
-| Galaxy / Galaxy Digital | 갤럭시 / 갤럭시디지털 | 갈럭시 |
-| BTC (한국어 문장 안에서) | 비트코인 | BTC |
+| 앤스로픽 | 앤트로픽 | 5 vs 45건 |
+| 할라피뇨 | 할라페뇨 | 9 vs 6건 — 다수파가 아닌 쪽을 골랐다. 스페인어 jalapeño의 한국어 외래어 표기가 '할라페뇨'다 |
+| 제미니 | 제미나이 | 1 vs 3건 |
+| 데이터 센터 | 데이터센터 | 2 vs 64건 |
+| 챗지피티 | 챗GPT | — |
+| 오픈에이아이 | 오픈AI | — |
+| 라마3 | 라마 3 | — |
 
-`BTC` 금지는 프로젝트 `CLAUDE.md`의 규칙이다. 전체가 영문인 `subtitle`은 예외.
+이 목록은 지어낸 게 아니라 2026-08-26 하루치 `asset=ai` 응답 500건에서 실제로
+갈린 표기다(근거 열의 숫자가 그날 등장 횟수). 새 모델·회사 이름이 두 갈래로
+들어오는 걸 보면 표에 한 줄 추가하고 그날 발행분부터 적용한다.
+
+`btc-daily-web`의 "BTC 금지" 같은 표기 금지어는 이 프로젝트에 없다 — 코인 소재
+배제는 카드를 고르는 단계(`CLAUDE.md`의 "도메인 경계" 절)에서 하고, 이 표는
+순수하게 같은 개체를 매일 같은 표기로 쓰기 위한 것이다.
 
 > 새 표기 분쟁이 생기면 고친 뒤 이 표에 한 줄 추가한다. 표에 없으면 다음 발행 때
 > 같은 실수가 반복된다.
 
-## 3. 발행 방법
+## 3. 후보의 클러스터링 필드
+
+여기서부터는 `collect_daily.py`가 만드는 draft의 뉴스 후보 항목에 붙는
+필드를 다룬다 — 최종 스키마(`EditionContent`)에는 없지만, 카드 10장을 고를
+때 반드시 읽어야 하므로 계약 문서에 남겨둔다.
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| `cluster_size` | int | 이 사건을 다룬 후보 기사 수(매체 수의 하한) — 클수록 화제성이 높다 |
+| `also_covered_by` | list[str] | 대표 기사를 뺀 나머지 매체 이름(중복 제거) |
+| `cluster_titles` | list[{title, url}] | 나머지 기사의 제목/URL. 같은 사건의 다른 각도를 보여준다 |
+
+`asset=ai` 피드는 매체 54곳(googlenews 경유 포함)을 모으므로 같은 사건이 여러
+매체에 동시에 실리는 일이 흔하다. `collect_daily.py`의 `collapse_events`가 이걸
+사건 하나당 후보 하나로 접어 위 세 필드를 대표 기사에 붙인다.
+
+- `cluster_size`가 크면 여러 매체가 동시에 다룬 사건이다 — 카드로 쓸 우선순위
+  신호로 삼는다.
+- **`cluster_titles`를 반드시 훑어라.** `cluster_events`는 주제가 인접한 다른
+  사건을 가끔 같이 묶는다(2026-08-26 코퍼스 285건 실측: 군 27개 중 1개가
+  그랬다 — "인도 AI 데이터센터 투자"에 "머스크 AI 위성 발사"가 붙었다). 대표
+  제목만 보고 카드를 쓰면 다른 사건의 매체 수를 빌려 쓰게 된다.
+- 대표는 "군에서 가장 앞선 것 중 이미지가 있는 것"이다. 이미지와 후보의 `link`는
+  항상 같은 기사에서 나온다 — **다른 매체 이미지를 가져다 붙이지 마라.**
+
+## 4. 발행 방법
 
 ```bash
 cd backend
 source .venv/bin/activate
-python scripts/push_edition.py drafts/edition-<date>.json
+python scripts/push_edition.py drafts/edition-<date>.json --api http://localhost:8003
 # 또는 meta.date와 교차검증하며:
-python scripts/push_edition.py drafts/edition-<date>.json --date <date>
+python scripts/push_edition.py drafts/edition-<date>.json --api http://localhost:8003 --date <date>
 ```
+
+> `push_edition.py`의 `DEFAULT_API`는 아직 `http://localhost:8002`다
+> (`btc-daily-web`에서 그대로 넘어온 값이라 이 프로젝트 포트와 다르다) —
+> 고쳐지기 전까지는 `--api`를 매번 명시해야 한다.
 
 내부 동작:
 1. `app.schemas.EditionContent`로 **로컬 선검증** — 여기서 실패하면 서버에
@@ -150,108 +204,121 @@ python scripts/push_edition.py drafts/edition-<date>.json --date <date>
 2. `check_cover_matches_date`로 `cover.mark`/`cover.meta[2]`가 `meta.date`에서
    파생된 값인지 확인 — stale draft가 DB의 올바른 cover를 되돌리는 사고를 막는다.
    여기서 걸리면 draft를 최신 코드로 재생성해야 하며, **가드를 우회하지 않는다**.
-3. `check_wording`(`app/wording.py`)으로 **문구 게이트** — 2.1(어미)·2.2(표기
-   용어집) 위반이면 어느 카드 어느 필드인지 찍고 POST 없이 종료. `meta.date`가
-   계약 발효일(2026-08-07) 이전이면 건너뛴다(과거 발행분은 평서체·`BTC` 표기가
-   섞여 있어, 소급 적용하면 오타 수정 재발행이 막힌다). 이 가드도 우회 옵션이 없다.
+3. `check_wording`(`app/wording.py`)으로 **문구 게이트** — 2.1(어미)·2.1.1(제목)·
+   2.2(표기 용어집) 위반이면 어느 카드 어느 필드인지 찍고 POST 없이 종료.
+   발효일 예외가 없다 — `EFFECTIVE_DATE`/`TITLE_RULE_DATE`가 `datetime.date.min`
+   이라 첫 발행부터 전부 검사한다. 이 가드도 우회 옵션이 없다.
 4. `backend/.env`(절대경로로 탐색)에서 `ADMIN_API_KEY` 로드. 없으면 실패.
-5. `POST {api}/api/editions` (`--api` 기본값 `http://localhost:8002`).
+5. `POST {api}/api/editions`.
 
-> 게이트는 **표에 적힌 것만** 잡는다. 오역이나 어색한 음차처럼 판단이 필요한 문제는
+> 게이트는 표에 적힌 것만 잡는다. 오역이나 어색한 음차처럼 판단이 필요한 문제는
 > 걸러내지 못하므로, 새 사례가 나오면 고친 뒤 2.2절 표에 한 줄 추가한다.
 
-### 프로덕션 발행
+### 도메인이 정해지면
 
-수집 소스(my-news `:8000`, my-youtube `:23456`)는 개발 머신에만 있으므로,
-수집·문구작성·Q&A 생성은 로컬에서 하고 **마지막 발행만 프로덕션을 향한다**:
+이 프로젝트는 아직 프로덕션 도메인이 없다. 수집 소스(my-news `:8000`, my-youtube
+`:23456`)도 개발 머신에만 있으므로, 수집·문구작성·발행을 전부 로컬에서 한다:
 
 ```bash
-python scripts/push_edition.py ../drafts/edition-<date>.json \
-  --api https://daily.onebitebitcoin.com
+python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localhost:8003
 ```
 
-- `backend/.env`의 `ADMIN_API_KEY`가 **서버 `.env`의 값과 같아야** 한다. 다르면 401.
+- `backend/.env`에 `ADMIN_API_KEY`가 있어야 한다(로컬이라도 fail closed).
 - 같은 `meta.date`로 다시 보내면 upsert다 — 오타 수정 후 재발행이 안전하다.
-- 발행 확인: `curl -s https://daily.onebitebitcoin.com/api/editions`
+- 발행 확인: `curl -s http://localhost:8003/api/editions`
 
-## 4. 이미지 규칙
+도메인이 정해지면 아래 네 곳을 함께 고친다 — 하나라도 빠지면 절반은 로컬을,
+절반은 프로덕션을 보는 상태로 어긋난다.
+
+| 파일 | 고칠 것 |
+|---|---|
+| `.env.example`의 `DOMAIN` | 실제 도메인 |
+| `deploy/nginx/DOMAIN.bootstrap.conf`, `deploy/nginx/DOMAIN.conf` | 파일 안의 `DOMAIN` 플레이스홀더를 실제 도메인으로, 파일명도 `<도메인>.conf`로 바꾼 뒤 배포 |
+| `backend/scripts/collect_daily.py`의 `DEFAULT_EDITION_API` | 로컬(`http://localhost:8003`) → 프로덕션 URL |
+| `scripts/daily-cron.sh`의 `API` | 로컬 → 프로덕션 URL |
+
+## 5. 이미지 규칙
 
 `media.image`는 **stem(번들 asset 파일명)과 절대 URL 둘 다 허용**된다
-(`frontend/src/imageUrl.ts`의 `cardImageSrc`가 둘 다 해석). 시드 fixture 9장은
-전부 stem(`fed-macro` 등, `frontend/src/assets/media/`에 실물 파일 존재).
-자동 발행 파이프라인(`scripts/collect_daily.py` → 이 계약)은 **원본 썸네일
-URL을 그대로 쓴다** — 발행 시점에는 다운로드/재호스팅을 하지 않는다.
-대신 프론트가 절대 URL을 `/api/img/{date}/{num}` 프록시로 돌려 WebP로 줄여
-받는다(원본 평균 380KB → 약 35KB). 계약에는 원본 URL을 그대로 넣으면 된다:
+(`frontend/src/imageUrl.ts`의 `cardImageSrc`가 둘 다 해석). 시드 fixture는 전부
+stem(`frontend/src/assets/media/`에 실물 파일 존재). 자동 발행 파이프라인
+(`scripts/collect_daily.py` → 이 계약)은 **원본 썸네일 URL을 그대로 쓴다** —
+발행 시점에는 다운로드/재호스팅을 하지 않는다. 대신 프론트가 절대 URL을
+`/api/img/{date}/{num}` 프록시로 돌려 WebP로 줄여 받는다(원본 평균 380KB →
+약 35KB). 계약에는 원본 URL을 그대로 넣으면 된다:
 - 뉴스: 후보의 `image_url` 그대로.
 - 유튜브: `https://i.ytimg.com/vi/{video_id}/hqdefault.jpg`.
 
+이 프로젝트가 실제로 마주치는 이미지 문제는 있느냐 없느냐다. 2026-08-26
+코퍼스 285건 기준 드라이런에서, 클러스터링 전 후보 100건 중 이미지가 붙은 건
+39건(39%)뿐이었다 — googlenews 경유 기사가 `image_url` 없이 들어오는 탓이다.
+`collect_daily.py`의 `collapse_events`가 사건 군 안에서 이미지 있는 기사를
+대표로 올리는 이유가 이거고, 그 결과 상위 10건 커버리지가 4/10에서 7/10으로
+올랐다. 그래도 하루 10장 중 3장 안팎은 이미지를 못 채울 수 있다는 뜻이다 —
+`media: null`을 두려워하지 않는다.
+
 이미지가 없는 후보는 `media: null`로 둔다 — 가짜 URL이나 플레이스홀더로
 채우지 않는다. 개발자 포럼·레딧처럼 대표 이미지를 주지 않는 소스, 그리고 썸네일이
-본문과 어긋나 일부러 뺀 카드까지 합쳐 하루 10장 중 0~3장이 여기 해당한다.
+본문과 어긋나 일부러 뺀 카드까지 여기 해당한다.
 
 `media: null`인 카드는 프론트가 이미지 자리를 비우지 않고 **카드가 이미 가진 문구를
 조판해 채운다**(`CardArtFallback`). 고르는 순서는 `quote` → `subtitle` → `chip.text`
 → 카드 번호다. `quote`가 1순위인 이유는 카드 표면에 나오지 않는 유일한 필드라
 중복 없이 정보가 하나 늘기 때문이다. 부제가 아트로 올라간 카드는 본문에서 같은 줄을
-빼 메아리를 없앤다. 따라서 **`quote`를 채워 두면 이미지 없는 카드의 완성도가 올라간다.**
+빼 메아리를 없앤다. 따라서 `quote`를 채워 두면 이미지 없는 카드의 완성도가 올라간다.
 
-다만 폴백은 **최후 수단이지 기본값이 아니다.** 조판된 문구 카드가 여러 장 이어지면
-카드뉴스가 글 모음처럼 보인다. 아래 4.0절 순서를 먼저 다 밟고, 그래도 쓸 이미지가
+다만 폴백은 최후 수단이지 기본값이 아니다. 조판된 문구 카드가 여러 장 이어지면
+카드뉴스가 글 모음처럼 보인다. 아래 5.0절 순서를 먼저 다 밟고, 그래도 쓸 이미지가
 없을 때만 `media: null`로 간다.
 
-### 4.0. 어떤 이미지를 고르는가 — 우선순위
+### 5.0. 어떤 이미지를 고르는가 — 우선순위
 
-`collect_daily.py`가 넘겨주는 `image_url`은 **후보지 정답이 아니다.** 2026-08-19~23
-발행 48장을 전수 점검했더니 23%가 기사와 무관한 그림이었다(채굴 카드에 테더 로고,
-ETF 카드에 채굴기 사진, 보안 카드에 구글 독스 아이콘). 매체가 기사마다 이미지를
-성의껏 고르지 않기 때문이다 — 특히 토큰포스트 본문 이미지는 `alt` 크레딧이
-`/ TokenPost.ai`인 자체 AI 생성물이라 기사 내용과 느슨하게만 이어진다.
+`collect_daily.py`가 넘겨주는 `image_url`은 후보지 정답이 아니다.
+`btc-daily-web`에서 관찰된 사례로는, 2026-08-19~23 발행 48장을 전수 점검했더니
+23%가 기사와 무관한 그림이었다(채굴 카드에 테더 로고, ETF 카드에 채굴기 사진,
+보안 카드에 구글 독스 아이콘) — 매체가 기사마다 이미지를 성의껏 고르지 않기
+때문이다. 이 프로젝트는 아직 그 정도로 축적된 실측이 없지만, 같은 googlenews
+경유 매체 생태계를 공유하므로 같은 위험이 있다고 보고 아래 순서를 그대로 쓴다.
 
 그래서 아래 순서로 고른다. 위에서 걸리면 거기서 멈춘다.
 
 1. **링크한 기사 본문의 실사진.** `<figcaption>`이 붙은 이미지가 실사일 확률이 높다
-   (예: `캡션: 레이 달리오. 자료=CNBC 화면 갈무리`). `og:image`가 AI 생성이어도
+   (예: `캡션: 젠슨 황. 자료=CNBC 화면 갈무리`). `og:image`가 AI 생성이어도
    본문 안에는 진짜 사진이 있는 경우가 있으니 본문을 열어 확인한다.
 2. **같은 기업·인물을 찍은 다른 기사의 실사진.** 카드가 다루는 대상 자체를 찍은
-   사진이면 다른 기사에서 가져와도 된다(예: 코인베이스 수익 카드에 다른 기사의
-   브라이언 암스트롱 CNBC 화면). 링크와 이미지 출처가 갈리지만, 무관한 스톡보다
-   낫다. **사건이 아니라 대상이 같아야 한다** — 아무 비트코인 사진이나 붙이지 말 것.
+   사진이면 다른 기사에서 가져와도 된다(예: 오픈AI 인사 카드에 다른 기사의 샘
+   알트만 청문회 사진). 링크와 이미지 출처가 갈리지만, 무관한 스톡보다 낫다.
+   **같은 대상을 찍었는지가 기준이다** — 사건까지 같을 필요는 없다. 아무
+   데이터센터 사진이나 붙이지 말 것.
 3. **후보가 준 `image_url`.** 기사와 실제로 맞는지 눈으로 보고 판단한다.
 4. **`media: null`.** 위 셋이 다 안 되면.
 
 거르는 것:
 - **AI 생성 그림 중 글자가 깨진 것은 반드시 뺀다.** 화면·간판에 뭉개진 가짜 텍스트가
-  박혀 있으면 확대했을 때 품질을 깎는다(실측: `SUH`·`WBTH` 같은 오타가 그대로 노출).
+  박혀 있으면 확대했을 때 품질을 깎는다(`btc-daily-web` 실측: `SUH`·`WBTH` 같은
+  오타가 그대로 노출됐다). AI 도메인 소재(오픈AI 칩·데이터센터 등)에도 AI 생성
+  일러스트가 흔히 붙으므로 같은 위험이 있다.
 - **범용 비즈니스 스톡**(펜 든 손, 악수, 노트북 앞 사람)은 어느 기사에도 맞지 않는다.
 - **최근 발행분에 나간 그림.** `collect_daily.py`가 average hash로 거르지만
   (`IMAGE_HASH_MAX_DISTANCE`), 매체가 같은 소재를 다르게 찍은 것까지는 못 잡는다 —
   `recent_editions.py` 출력의 이미지를 눈으로도 대조한다.
 
-### 4.1. 표지 인용구의 화자 초상 (`cover.quote.portrait`)
+### 5.1. 표지 인용구의 화자 초상 (`cover.quote.portrait`)
 
 뉴스 이미지와 규칙이 다르다. 원격 URL을 쓰지 않고 **저장소에 번들한 파일**
 (`frontend/src/assets/portraits/<stem>.jpg`)만 참조한다 — 매일 같은 몇 장이
 반복되므로 프록시를 태울 이유가 없다.
 
-**퍼블릭 도메인 사진만 담는다.** 공개 사이트라 CC BY-SA 사진은 저작자·라이선스
+퍼블릭 도메인 사진만 담는다. 공개 사이트라 CC BY-SA 사진은 저작자·라이선스
 표기 줄이 따라붙어야 하는데, 그 줄이 인용구보다 길어져 표지가 지저분해진다.
 
-2026-08-07 기준 위키미디어 공용을 확인한 결과:
-
-| 인물 | 초상 | 근거 |
-|---|---|---|
-| 카를 멩거 | O | Public domain |
-| 오이겐 폰 뵘바베르크 | O | Public domain |
-| 루트비히 폰 미제스 | X | CC BY-SA 3.0뿐 |
-| 프리드리히 하이에크 | X | CC BY-SA 3.0뿐 |
-| 머리 로스바드 | X | CC BY 3.0뿐 |
-| 헨리 해즐릿 | X | PD 사진 없음(1951년 방송 영상만 PD) |
-
-그래서 **인용구 27개 중 3개만 사진이고 24개는 `portrait: null`**이다. null이면
-프론트가 이름을 조판한 원형 아바타를 그린다(`SpeakerAvatar`) — 이미지 없는 카드를
+`ai_quotes.json`은 현재 28개 전부 `portrait: null`이다 — 아직 퍼블릭 도메인
+초상을 하나도 확보하지 못했다는 뜻이고, 그래서 표지 인용구는 지금 전원 이름을
+조판한 원형 아바타로 나간다(`SpeakerAvatar`). 이미지 없는 카드를
 `CardArtFallback`이 다루는 방식과 같은 태도다.
 
-초상을 추가할 때는 `austrian_quotes.json`의 `portrait_source`(위키미디어 파일
-페이지 URL)와 `portrait_license`를 반드시 함께 채운다. 빈 값이면 테스트가 막는다.
-**라이선스가 애매하면 사진을 넣지 않고 아바타로 간다.**
+초상을 새로 추가할 때는:
+- **퍼블릭 도메인 사진만 쓴다.** 위키미디어 공용 등에서 라이선스를 직접 확인한다.
+- `ai_quotes.json`의 `portrait_source`(파일 페이지 URL)와 `portrait_license`를
+  반드시 함께 채운다. 빈 값이면 테스트가 막는다.
+- **라이선스가 애매하면 사진을 넣지 않고 아바타로 간다.**

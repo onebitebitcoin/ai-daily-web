@@ -14,11 +14,24 @@ REFERENCE_CONTENT = Path(__file__).resolve().parents[2] / "reference" / "content
 
 
 def reference_payload(date: str = "2026-07-30") -> dict[str, Any]:
+    """push_edition/generate_qa 테스트용 에디션 — reference/content.json 을 씨앗으로 쓴다.
+
+    reference/content.json 은 비트코인 카드뉴스 시절 디자인 레퍼런스라(CLAUDE.md
+    명시 예외) 서술형 제목·평서체 본문이 섞여 있어 app/wording.py 의 문구 게이트를
+    통과하지 못한다 — 이 프로젝트에는 더 이상 발효일 예외가 없어(wording.py 참고)
+    push_edition.main() 이 그 자리에서 SystemExit 을 낸다. 여기서 보는 건 문구가
+    아니라 스키마·커버 일치·API 흐름이므로, 카드 내용을 게이트를 통과하는 형태로
+    갈아끼워 노이즈를 없앤다.
+    """
     payload = json.loads(REFERENCE_CONTENT.read_text(encoding="utf-8"))
     payload["meta"]["date"] = date
     payload["cover"] = collect_daily.apply_date_to_cover(
         payload["cover"], datetime.date.fromisoformat(date)
     )
+    for card in payload["cards"]:
+        card["title"] = f"소식 정리 {card['num']}"
+        card["body"] = "그렇습니다."
+        card["quote"] = None
     return payload
 
 
@@ -36,7 +49,7 @@ def make_news(**overrides: Any) -> dict[str, Any]:
 def make_video(**overrides: Any) -> dict[str, Any]:
     base = {
         "id": "abc123",
-        "topic": "비트코인",
+        "topic": "AI",
         "summary": "요약",
         "published_at": "2026-07-31T02:00:00+00:00",
         "added_at": "2026-07-31T02:00:00+00:00",
@@ -215,91 +228,97 @@ def test_filter_news_caps_at_the_limit() -> None:
 # ---- collect_daily.classify_relevance / 관련도 우선순위 ----
 
 
-def test_classify_relevance_marks_bitcoin_only_articles_as_btc() -> None:
-    news = make_news(title="비트코인 8만달러 매도벽, 바이낸스 호가에 집중")
+def test_classify_relevance_marks_ai_only_articles_as_ai() -> None:
+    news = make_news(title="오픈AI, 새 추론 모델 벨 공개로 벤치마크 경신")
 
-    assert collect_daily.classify_relevance(news) == "btc"
+    assert collect_daily.classify_relevance(news) == "ai"
 
 
-def test_classify_relevance_marks_altcoin_articles_as_other() -> None:
-    """제목이 알트 쪽으로 기울면 tags 에 #비트코인 이 붙어 있어도 btc 가 아니다.
+def test_classify_relevance_marks_crypto_articles_tagged_ai_as_other() -> None:
+    """크립토 배제 축의 핵심 방어선 — #인공지능 태그가 붙어도 본문이 코인 시황이면 other다.
 
-    실제 사고: 2026-08-24 발행분의 스택스 sBTC 카드가 이 경로로 들어왔다 —
-    토큰포스트 태그에 #비트코인 이 달려 있어 btc 기사처럼 보였다.
+    실제 위험 유형: 코인 매체(토큰포스트 등)가 시황 기사에 습관적으로 #인공지능
+    태그를 붙이는 경우가 있다 — 태그를 곧이곧대로 믿으면 코인 시황이 ai 등급으로
+    올라가 후보 상단을 차지하게 된다.
     """
     news = make_news(
-        title="스택스 예치 4억3700만달러, 보안 모델 재점검",
-        tags="['#비트코인', '#스택스', '#암호화폐']",
+        title="비트코인 8만달러 회복, 알트코인도 동반 상승",
+        tags="['#인공지능', '#비트코인', '#알트코인']",
     )
 
     assert collect_daily.classify_relevance(news) == "other"
 
 
-def test_classify_relevance_marks_macro_articles_as_macro() -> None:
-    news = make_news(title="40억달러 바이백에도 미 장기금리 하루 만에 반등")
+def test_classify_relevance_marks_industry_articles_as_industry() -> None:
+    news = make_news(title="엔비디아 HBM 공급 부족, 삼성 파운드리 증설 검토")
 
-    assert collect_daily.classify_relevance(news) == "macro"
+    assert collect_daily.classify_relevance(news) == "industry"
 
 
-def test_classify_relevance_does_not_read_dollar_price_headlines_as_macro() -> None:
-    """ "N달러" 는 코인 시세 헤드라인의 기본형이라 매크로 신호로 쓰지 않는다."""
-    news = make_news(title="이더리움 2450달러 넘어 24시간 1.08% 상승")
+def test_classify_relevance_does_not_treat_the_word_token_as_an_ai_signal() -> None:
+    """'토큰'은 AI_TERMS에 없다 — 코인 시세 기사가 '토큰'이라는 단어만으로 ai로 잘못 분류되면 안 된다.
+
+    AI_TERMS 주석이 남긴 이유 그대로다: "토큰"을 넣으면 코인 기사를 그대로 끌고 온다.
+    """
+    news = make_news(title="리플 토큰 가격 급등, 커뮤니티 환호")
 
     assert collect_daily.classify_relevance(news) == "other"
 
 
 def test_classify_relevance_matches_ascii_terms_on_word_boundaries() -> None:
-    """'eth' 가 'method' 에, 'gold' 가 'Goldman' 에 걸리면 안 된다."""
-    news = make_news(title="A new method for Goldman clients to buy bitcoin")
+    """'rag' 가 'storage' 안에, 'ai' 가 'said' 안에 걸리면 무관한 기사가 ai로 잘못 분류된다."""
+    news = make_news(title="AWS said its storage price cuts boosted margin")
 
-    assert collect_daily.classify_relevance(news) == "btc"
+    assert collect_daily.classify_relevance(news) == "other"
 
 
 def test_filter_news_attaches_relevance_to_every_candidate() -> None:
-    items = [make_news(title="비트코인 200일선 회복, 골든크로스 접근")]
+    items = [make_news(title="오픈AI 새 추론 모델 공개")]
 
     result = collect_daily.filter_news(items, NOW)
 
-    assert result[0]["relevance"] == "btc"
+    assert result[0]["relevance"] == "ai"
 
 
-def test_filter_news_fills_btc_before_macro_before_other() -> None:
-    """등급이 바깥 축이다 — 더 최근이어도 other 는 btc 뒤로 밀린다.
+def test_filter_news_fills_ai_before_industry_before_other() -> None:
+    """등급이 바깥 축이다 — 더 최근이어도 other 는 ai 뒤로 밀린다.
 
-    other 를 가장 최근으로 두고 btc 를 가장 오래된 것으로 둔다. 예전처럼 최신순
+    other 를 가장 최근으로 두고 ai 를 가장 오래된 것으로 둔다. 예전처럼 최신순
     단일 정렬이었다면 other 가 맨 앞에 왔을 배치다.
     """
     other = make_news(
-        source_ref="other", title="지캐시 850달러 돌파", crawled_at="2026-07-31T02:55:00+00:00"
+        source_ref="other", title="비트코인 8만달러 회복", crawled_at="2026-07-31T02:55:00+00:00"
     )
-    macro = make_news(
-        source_ref="macro", title="연준 금리 동결 시사", crawled_at="2026-07-31T02:50:00+00:00"
+    industry = make_news(
+        source_ref="industry",
+        title="엔비디아 HBM 공급 부족",
+        crawled_at="2026-07-31T02:50:00+00:00",
     )
-    btc = make_news(
-        source_ref="btc", title="비트코인 난이도 하락", crawled_at="2026-07-31T02:45:00+00:00"
+    ai = make_news(
+        source_ref="ai", title="오픈AI 새 모델 공개", crawled_at="2026-07-31T02:45:00+00:00"
     )
 
-    result = collect_daily.filter_news([other, macro, btc], NOW)
+    result = collect_daily.filter_news([other, industry, ai], NOW)
 
-    assert [n["source_ref"] for n in result] == ["btc", "macro", "other"]
+    assert [n["source_ref"] for n in result] == ["ai", "industry", "other"]
 
 
-def test_filter_news_truncates_lower_tiers_when_btc_fills_the_limit() -> None:
-    """btc 만으로 NEWS_LIMIT 이 차면 알트 기사는 후보에 아예 안 들어온다."""
-    btc = [
+def test_filter_news_truncates_lower_tiers_when_ai_fills_the_limit() -> None:
+    """ai 만으로 NEWS_LIMIT 이 차면 다른 등급 기사는 후보에 아예 안 들어온다."""
+    ai = [
         make_news(
-            source_ref=f"btc-{i}",
-            title="비트코인 시황",
+            source_ref=f"ai-{i}",
+            title="오픈AI 새 모델 공개",
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.NEWS_LIMIT)
     ]
-    alt = [make_news(source_ref="alt", title="이더리움 로드맵 재정렬")]
+    other = [make_news(source_ref="other", title="이더리움 스테이킹 물량 증가")]
 
-    result = collect_daily.filter_news(btc + alt, NOW)
+    result = collect_daily.filter_news(ai + other, NOW)
 
     assert len(result) == collect_daily.NEWS_LIMIT
-    assert all(n["relevance"] == "btc" for n in result)
+    assert all(n["relevance"] == "ai" for n in result)
 
 
 def test_filter_news_puts_priority_urls_first_within_a_bucket() -> None:
@@ -307,13 +326,13 @@ def test_filter_news_puts_priority_urls_first_within_a_bucket() -> None:
     items = [
         make_news(
             source_ref="newest",
-            title="비트코인 A",
+            title="오픈AI 소식 A",
             url="https://example.com/newest",
             crawled_at="2026-07-31T02:55:00+00:00",
         ),
         make_news(
             source_ref="hot",
-            title="비트코인 B",
+            title="오픈AI 소식 B",
             url="https://example.com/hot",
             crawled_at="2026-07-31T02:00:00+00:00",
         ),
@@ -326,8 +345,12 @@ def test_filter_news_puts_priority_urls_first_within_a_bucket() -> None:
 
 def test_filter_news_without_priority_urls_stays_on_recency() -> None:
     items = [
-        make_news(source_ref="older", title="비트코인 A", crawled_at="2026-07-31T02:00:00+00:00"),
-        make_news(source_ref="newer", title="비트코인 B", crawled_at="2026-07-31T02:55:00+00:00"),
+        make_news(
+            source_ref="older", title="오픈AI 소식 A", crawled_at="2026-07-31T02:00:00+00:00"
+        ),
+        make_news(
+            source_ref="newer", title="오픈AI 소식 B", crawled_at="2026-07-31T02:55:00+00:00"
+        ),
     ]
 
     result = collect_daily.filter_news(items, NOW)
@@ -336,7 +359,7 @@ def test_filter_news_without_priority_urls_stays_on_recency() -> None:
 
 
 def test_filter_news_does_not_add_relevance_to_input_items() -> None:
-    items = [make_news(title="비트코인 시황")]
+    items = [make_news(title="오픈AI 소식")]
 
     collect_daily.filter_news(items, NOW)
 
@@ -358,78 +381,78 @@ def test_trending_article_urls_dedupes_and_stops_at_the_priority_cutoff() -> Non
     ]
 
 
-# ---- collect_daily.industry_topups / 매크로 예약 자리 ----
+# ---- collect_daily.industry_topups / 산업 예약 자리 ----
 
 
-def test_macro_topups_keeps_only_macro_tier() -> None:
-    """btc 등급은 일부러 버린다 — 이 피드의 tags:['bitcoin'] 은 못 믿는다."""
+def test_industry_topups_keeps_only_industry_tier() -> None:
+    """ai 등급은 일부러 버린다 — 이 피드는 asset 필터가 없어 대부분 비트코인·일반 뉴스다."""
     items = [
-        make_news(url="m", title="연준 금리 동결 시사"),
-        make_news(url="b", title="LG 한화 12-3 제압", tags="['bitcoin']"),
-        make_news(url="o", title="오픈AI 규제 입장 선회"),
+        make_news(url="i", title="엔비디아 HBM 공급 부족, 삼성 파운드리 증설"),
+        make_news(url="b", title="비트코인 8만달러 회복", tags="['ai']"),
+        make_news(url="a", title="오픈AI 새 모델 공개"),
     ]
 
     result = collect_daily.industry_topups(items, NOW)
 
-    assert [n["url"] for n in result] == ["m"]
+    assert [n["url"] for n in result] == ["i"]
 
 
-def test_macro_topups_skips_urls_already_in_the_base_feed() -> None:
-    items = [make_news(url="dup", title="연준 금리 동결 시사")]
+def test_industry_topups_skips_urls_already_in_the_base_feed() -> None:
+    items = [make_news(url="dup", title="엔비디아 GPU 공급 부족")]
 
     assert collect_daily.industry_topups(items, NOW, {"dup"}) == []
 
 
-def test_macro_topups_respects_the_news_window() -> None:
+def test_industry_topups_respects_the_news_window() -> None:
     stale = NOW - datetime.timedelta(hours=collect_daily.NEWS_WINDOW_HOURS + 1)
-    items = [make_news(url="old", title="연준 금리 동결 시사", crawled_at=stale.isoformat())]
+    items = [make_news(url="old", title="엔비디아 GPU 공급 부족", crawled_at=stale.isoformat())]
 
     assert collect_daily.industry_topups(items, NOW) == []
 
 
-def test_filter_news_reserves_slots_for_macro_when_btc_would_fill_the_limit() -> None:
-    """btc 가 상한을 다 먹어도 매크로가 후보에 보여야 한다."""
-    btc = [
+def test_filter_news_reserves_slots_for_industry_when_ai_would_fill_the_limit() -> None:
+    """ai 가 상한을 다 먹어도 산업(반도체·전력)이 후보에 보여야 한다."""
+    ai = [
         make_news(
-            source_ref=f"btc-{i}",
-            title="비트코인 시황",
+            source_ref=f"ai-{i}",
+            title="오픈AI 새 모델 공개",
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.NEWS_LIMIT + 20)
     ]
-    macro = [
+    industry = [
         make_news(
-            source_ref=f"macro-{i}",
-            title="연준 금리 동결 시사",
+            source_ref=f"industry-{i}",
+            title="엔비디아 HBM 공급 부족",
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.INDUSTRY_RESERVE + 5)
     ]
 
-    result = collect_daily.filter_news(btc + macro, NOW)
+    result = collect_daily.filter_news(ai + industry, NOW)
 
     assert len(result) == collect_daily.NEWS_LIMIT
-    kept = sum(1 for n in result if n["relevance"] == "macro")
+    kept = sum(1 for n in result if n["relevance"] == "industry")
     assert kept == collect_daily.INDUSTRY_RESERVE
 
 
-def test_filter_news_gives_the_reserve_back_when_macro_is_short() -> None:
-    """매크로가 예약분보다 적으면 남는 자리는 btc 가 도로 가져간다."""
-    btc = [
+def test_filter_news_gives_the_reserve_back_when_industry_is_short() -> None:
+    """산업 기사가 예약분보다 적으면 남는 자리는 ai 가 도로 가져간다."""
+    ai = [
         make_news(
-            source_ref=f"btc-{i}",
-            title="비트코인 시황",
+            source_ref=f"ai-{i}",
+            title="오픈AI 새 모델 공개",
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
         for i in range(collect_daily.NEWS_LIMIT + 20)
     ]
-    macro = [make_news(source_ref="macro-0", title="연준 금리 동결 시사")]
+    industry = [make_news(source_ref="industry-0", title="엔비디아 HBM 공급 부족")]
 
-    result = collect_daily.filter_news(btc + macro, NOW)
+    result = collect_daily.filter_news(ai + industry, NOW)
 
     assert len(result) == collect_daily.NEWS_LIMIT
-    assert sum(1 for n in result if n["relevance"] == "macro") == 1
-    assert sum(1 for n in result if n["relevance"] == "btc") == collect_daily.NEWS_LIMIT - 1
+    assert sum(1 for n in result if n["relevance"] == "industry") == 1
+    assert sum(1 for n in result if n["relevance"] == "ai") == collect_daily.NEWS_LIMIT - 1
 
 
 # ---- collect_daily 이미지 중복배제 (average hash) ----
@@ -604,11 +627,11 @@ def test_trending_pool_videos_does_not_require_a_summary() -> None:
 
 
 def test_trending_pool_videos_excludes_other_topics() -> None:
-    items = [make_video(id="btc"), make_video(id="ai", topic="AI")]
+    items = [make_video(id="ai"), make_video(id="btc", topic="비트코인")]
 
     result = collect_daily.trending_pool_videos(items, NOW)
 
-    assert [v["id"] for v in result] == ["btc"]
+    assert [v["id"] for v in result] == ["ai"]
 
 
 def test_trending_pool_videos_uses_a_24h_window_not_the_card_48h() -> None:
@@ -626,8 +649,8 @@ def test_trending_pool_videos_uses_a_24h_window_not_the_card_48h() -> None:
 # ---- collect_daily.filter_videos ----
 
 
-def test_filter_videos_requires_bitcoin_topic_and_summary() -> None:
-    items = [make_video(id="wrong-topic", topic="AI"), make_video(id="no-summary", summary="")]
+def test_filter_videos_requires_ai_topic_and_summary() -> None:
+    items = [make_video(id="wrong-topic", topic="비트코인"), make_video(id="no-summary", summary="")]
 
     assert collect_daily.filter_videos(items, NOW) == []
 
@@ -708,7 +731,7 @@ def test_build_skeleton_generates_date_slug_title_and_sources() -> None:
     skeleton = collect_daily.build_skeleton(
         datetime.date(2026, 7, 31),
         theme={"bg": "#000"},
-        brand="BTC DAILY",
+        brand="데일리 AI",
         cover_fixed={"eyebrow": "E", "mark": ["a"], "meta": ["x", "y", "old"], "hint": "h"},
         closing_fixed={
             "eyebrow": "E",
@@ -722,11 +745,11 @@ def test_build_skeleton_generates_date_slug_title_and_sources() -> None:
     )
 
     assert skeleton["meta"] == {
-        "title": "비트코인 하이라이트 · 7.31",
-        "slug": "btc-daily-0731",
+        "title": "AI 하이라이트 · 7.31",
+        "slug": "ai-daily-0731",
         "date": "2026-07-31",
     }
-    assert skeleton["cover"]["mark"] == ["7월 31일", "비트코인 카드뉴스"]
+    assert skeleton["cover"]["mark"] == ["7월 31일", "AI 카드뉴스"]
     assert skeleton["cover"]["meta"] == ["x", "y", "2026.07.31"]
     assert skeleton["closing"]["sources"] == ["A", "B"]
 
@@ -763,7 +786,7 @@ def test_collect_daily_main_writes_draft(tmp_path: Path) -> None:
 
     assert result_path == out_path
     data = json.loads(out_path.read_text(encoding="utf-8"))
-    assert data["skeleton"]["meta"]["slug"] == "btc-daily-0731"
+    assert data["skeleton"]["meta"]["slug"] == "ai-daily-0731"
     assert data["candidates"]["news"][0]["source_ref"] == "X"
     assert data["candidates"]["videos"][0]["thumbnail_url"] == (
         "https://i.ytimg.com/vi/v1/hqdefault.jpg"
@@ -895,13 +918,13 @@ def test_apply_date_to_cover_derives_mark_and_meta() -> None:
         datetime.date(2026, 7, 31),
     )
 
-    assert cover["mark"] == ["7월 31일", "비트코인 카드뉴스"]
+    assert cover["mark"] == ["7월 31일", "AI 카드뉴스"]
     assert cover["meta"] == ["x", "y", "2026.07.31"]
 
 
 def test_push_edition_rejects_cover_mark_contradicting_meta_date(tmp_path: Path) -> None:
     payload = reference_payload()
-    payload["cover"]["mark"] = ["비트코인", "하이라이트"]  # stale/pre-fix cover
+    payload["cover"]["mark"] = ["AI", "하이라이트"]  # stale/pre-fix cover (날짜 적용 전 픽스처 값)
     edition_path = tmp_path / "edition.json"
     edition_path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -934,7 +957,7 @@ def test_push_edition_accepts_cover_matching_meta_date(
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result = push_edition.main([str(edition_path)], client=client)
 
-    assert result["cover"]["mark"] == ["7월 30일", "비트코인 카드뉴스"]
+    assert result["cover"]["mark"] == ["7월 30일", "AI 카드뉴스"]
 
 
 def test_push_edition_missing_api_key_fails(
@@ -1351,7 +1374,7 @@ def test_build_skeleton_puts_the_cover_quote_beside_the_date_fields() -> None:
 
     assert skeleton["cover"]["quote"] == quote
     # 날짜 파생 필드는 그대로여야 한다 — push_edition 의 cover 가드가 이걸 본다.
-    assert skeleton["cover"]["mark"] == ["8월 8일", "비트코인 카드뉴스"]
+    assert skeleton["cover"]["mark"] == ["8월 8일", "AI 카드뉴스"]
 
 
 def test_build_skeleton_omits_the_quote_key_when_there_is_none() -> None:

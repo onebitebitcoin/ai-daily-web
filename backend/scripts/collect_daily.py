@@ -187,6 +187,19 @@ CRYPTO_TERMS = (
     "온체인",
     "김치 프리미엄",
     "거래소 상장",
+    # 거래소·크립토 운용사 이름. 2026-08-26 실측에서 "Bitwise turns Coinbase's
+    # tokenized stocks into automated AI portfolios" 한 건이 ai 등급으로 샜다 —
+    # 제목의 AI 점수가 크립토 점수보다 높았기 때문이다. 아래는 다른 뜻으로 읽힐
+    # 여지가 없는 고유명사만 골랐다. "토큰"·"stable" 은 넣지 않는다 — 각각 LLM
+    # 토큰과 Stable Diffusion 을 그대로 끌고 온다.
+    "코인베이스",
+    "coinbase",
+    "bitwise",
+    "바이낸스",
+    "binance",
+    "업비트",
+    "upbit",
+    "kraken",
 )
 # 2순위. 반도체·전력·자본지출 — AI 를 굴리는 데 드는 물리적 비용 쪽이다.
 # **넓은 단어를 넣지 않는 게 이 튜플의 규칙이다.** 2026-08-26 드라이런에서
@@ -253,9 +266,16 @@ EVENT_SIM_THRESHOLD = 0.32
 # 비교(완전 연결에 가깝게)하면 할라페뇨 7건이 5+3 으로 쪼개졌다. 두 조건을 같이
 # 걸어 0.20 에서 사슬이 끊기고 같은 사건은 붙는다.
 EVENT_HEAD_THRESHOLD = 0.20
-# 비율만 보면 짧은 제목이 위험하다 — 토큰이 둘뿐인 "Agent Lightning v1.0" 은
-# "agent" 하나만 겹쳐도 비율 0.5 가 나온다. 겹친 **개수** 하한을 같이 건다.
-EVENT_MIN_SHARED = 3
+# 비율만으로는 부족하다. 겹친 것이 **온전한 단어·숫자로 몇 개인지**를 따로 센다.
+# 바이그램 개수로 하한을 걸었더니(3) "엔비디아" 한 단어가 엔비/비디/디아 세 개라
+# 그것만으로 하한이 채워졌다 — 실측: 엔비디아를 언급하기만 한 서로 다른 사건 5건이
+# (신용노출 전망 · 인도 데이터센터 주문 · 머스크 위성 · 람다 자금조달 · 쿠다-X 확장)
+# 후보 1위 자리에 10건짜리 한 군으로 뭉쳤다.
+#
+# 같은 사건을 다룬 기사는 회사명 말고도 사건을 특정하는 말을 같이 쓴다 — 할라페뇨
+# 군은 오픈AI·할라페뇨·칩·공개를, 젯슨 군은 엔비디아·젯슨·나노·엣지를 공유한다.
+# 그래서 하한을 **서로 다른 단어 3개**로 옮겼다. 회사명 하나로는 절대 못 넘는다.
+EVENT_MIN_ANCHORS = 3
 # 서명에서 뺄 영문 기능어. 한국어는 형태소 분석 없이 문자 바이그램으로 처리하므로
 # (조사가 붙어도 바이그램 상당수가 겹친다) 불용어 목록이 따로 필요 없다.
 EVENT_EN_STOPWORDS = frozenset(
@@ -268,7 +288,7 @@ EVENT_EN_STOPWORDS = frozenset(
 )
 _EVENT_BRACKET = re.compile(r"\[[^\]]*\]")
 _EVENT_TAIL = re.compile(r"[-–—]\s*[가-힣A-Za-z ]{2,12}$")
-_EVENT_HANGUL = re.compile(r"[가-힣]+")
+_EVENT_HANGUL = re.compile(r"[가-힣]{2,}")
 _EVENT_LATIN = re.compile(r"[a-z]{3,}")
 _EVENT_NUMBER = re.compile(r"\d+(?:[.,]\d+)?[가-힣%a-z]*")
 
@@ -456,9 +476,19 @@ def classify_relevance(news: dict[str, Any]) -> str:
 def _event_signature(news: dict[str, Any]) -> frozenset[str]:
     """제목 하나를 "같은 사건인가"를 재는 서명으로 바꾼다.
 
-    한글은 문자 바이그램, 영문은 단어, 숫자는 단위째로 담는다. **영문을 바이그램으로
-    담으면 안 된다** — in·er·on 같은 흔한 글자쌍 때문에 관계없는 영문 기사들이
-    전부 한 덩어리가 된다(드라이런에서 영문 9건이 한 군으로 뭉쳤다).
+    두 종류를 섞어 담는다.
+
+    **앵커(`W:`/`N:`)** — 온전한 단어와 숫자다. 사건을 특정하는 건 이쪽이라
+    `_shared_anchors` 가 이것만 센다.
+
+    **한글 바이그램(`k:`)** — 조사가 붙거나 띄어쓰기가 달라 단어가 어긋나도
+    ("자율살상" / "자율 살상") 겹치게 해주는 완충재다. 형태소 분석 없이 한국어
+    표기 흔들림을 흡수하는 값싼 방법이다.
+
+    **영문은 바이그램으로 담지 않는다.** in·er·on 같은 흔한 글자쌍 때문에 관계없는
+    영문 기사들이 전부 한 덩어리가 된다(실측: 무관한 영문 9건이 한 군으로 뭉쳤다).
+    한글 바이그램은 단어 안에서만 만든다 — 문장 전체를 이어 붙여 자르면 "아신"
+    같은 단어 경계를 넘는 쌍이 생겨 같은 노이즈가 한글 쪽에 생긴다.
 
     말머리(`[미국 특징주]`)와 매체 꼬리(`- 조선비즈`)는 사건과 무관한데 여러 기사에
     공통으로 붙어 유사도를 부풀리므로 먼저 떼어낸다.
@@ -466,11 +496,18 @@ def _event_signature(news: dict[str, Any]) -> frozenset[str]:
     text = str(news.get("title") or "").lower()
     text = _EVENT_BRACKET.sub(" ", text)
     text = _EVENT_TAIL.sub(" ", text)
-    hangul = "".join(_EVENT_HANGUL.findall(text))
-    sig = {hangul[i : i + 2] for i in range(len(hangul) - 1)}
-    sig.update(f"w:{w}" for w in _EVENT_LATIN.findall(text) if w not in EVENT_EN_STOPWORDS)
-    sig.update(f"n:{w}" for w in _EVENT_NUMBER.findall(text))
+    sig: set[str] = set()
+    for word in _EVENT_HANGUL.findall(text):
+        sig.add(f"W:{word}")
+        sig.update(f"k:{word[i : i + 2]}" for i in range(len(word) - 1))
+    sig.update(f"W:{w}" for w in _EVENT_LATIN.findall(text) if w not in EVENT_EN_STOPWORDS)
+    sig.update(f"N:{w}" for w in _EVENT_NUMBER.findall(text))
     return frozenset(sig)
+
+
+def _shared_anchors(a: frozenset[str], b: frozenset[str]) -> int:
+    """두 서명이 공유하는 **온전한 단어·숫자**의 개수. 바이그램은 세지 않는다."""
+    return sum(1 for item in a & b if item[0] in "WN")
 
 
 def _overlap(a: frozenset[str], b: frozenset[str]) -> float:
@@ -481,13 +518,13 @@ def _overlap(a: frozenset[str], b: frozenset[str]) -> float:
 
 
 def _same_event(a: frozenset[str], b: frozenset[str]) -> bool:
-    """겹침 계수(작은 쪽 기준)와 겹친 개수를 둘 다 넘겨야 같은 사건으로 본다.
+    """겹침 계수(작은 쪽 기준)와 공유 앵커 수를 둘 다 넘겨야 같은 사건으로 본다.
 
     자카드가 아니라 겹침 계수를 쓰는 건 제목 길이가 매체마다 크게 다르기 때문이다 —
     통신사 한 줄 제목과 종합지 두 줄 제목이 같은 사건이어도 합집합이 커서 자카드가
     낮게 나온다.
     """
-    return len(a & b) >= EVENT_MIN_SHARED and _overlap(a, b) >= EVENT_SIM_THRESHOLD
+    return _shared_anchors(a, b) >= EVENT_MIN_ANCHORS and _overlap(a, b) >= EVENT_SIM_THRESHOLD
 
 
 def cluster_events(items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -501,11 +538,14 @@ def cluster_events(items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     1. 한국어 기사와 영문 기사가 같은 사건이어도 잘 안 묶인다 — 할라페뇨 한국어
        7건은 한 군이 됐지만 GeekNews·TechCrunch 영문판은 따로 남았다. 표기 사전
        없이는 못 넘는 선이고, 잘못 묶는 쪽이 못 묶는 쪽보다 비싸다.
-    2. 주제가 인접한 다른 사건은 가끔 붙는다 — 2026-08-26 코퍼스 285건에서 군 27개
-       중 하나가 그랬다("인도 데이터센터 80억달러 주문"에 "머스크 AI 위성 발사"가
-       붙었다). 둘 다 "AI 데이터센터 + 엔비디아칩"이라 서명이 실제로 겹친다.
-       대표에 cluster_titles 를 붙여 두는 이유가 이거다 — 카드를 고르는 쪽이 눈으로
-       가른다.
+    2. 주제가 인접한 다른 사건은 여전히 가끔 붙는다. 2026-08-26 실측에서는 "인도
+       데이터센터 베라 루빈 9000대 주문"과 "스페이스X 베라 CPU 도입"이 한 군이 됐다 —
+       둘 다 엔비디아 베라 계열 도입 건이라 앵커가 실제로 셋 이상 겹친다.
+    3. 반대로 표기가 갈리면 같은 사건이 쪼개진다. 우크라이나 자율살상 드론 6건은
+       "자율살상" / "자율 살상" / "살상 드론" 으로 갈려 2건씩 세 군으로 남았다.
+
+    둘 다 대표에 cluster_titles 를 붙여 두는 이유다 — 카드를 고르는 쪽이 눈으로
+    가른다. 잘못 묶는 쪽이 못 묶는 쪽보다 비싸므로 지금 균형은 미탐 쪽에 두었다.
     """
     signatures = [_event_signature(n) for n in items]
     groups: list[list[int]] = []
@@ -703,15 +743,17 @@ def filter_news(
             continue
         picked.extend(_round_robin_by_bucket(by_tier[tier], now, room, priority_urls))
 
-    # draft 를 사람이 읽을 땐 등급 → 화제성 → 최신순이 자연스럽다. 위에서부터 읽으면
-    # AI 온리에 여러 매체가 동시에 다룬 사건이 먼저 나온다 — 카드 10장을 고를 때
-    # 실제로 훑는 순서가 그거다.
+    # 읽는 순서는 등급 → 매체 수 → 트렌딩 → 최신순이다. **구간 정렬과 축 순서가
+    # 다르다.** 구간 정렬은 무엇이 후보에 들어올지를 정하므로 트렌딩 우선권을 앞에
+    # 둬야 화제 기사가 컷에서 잘리지 않는다. 여기는 이미 뽑힌 것을 늘어놓는 자리라
+    # "몇 개 매체가 같이 썼나"가 먼저 와야 한다 — 축 순서를 바꾸기 전에는 7개 매체가
+    # 쓴 오픈AI 할라페뇨 발표가 단독 기사들 아래로 내려가 있었다(2026-08-26 실측).
     priority = set(priority_urls)
     picked.sort(
         key=lambda n: (
             RELEVANCE_TIERS.index(n["relevance"]),
-            n.get("url") not in priority,
             -n.get("cluster_size", 1),
+            n.get("url") not in priority,
             -_parse_dt(n["crawled_at"]).timestamp(),
         )
     )

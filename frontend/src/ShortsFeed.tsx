@@ -167,7 +167,7 @@ export function ShortsFeed({ startDate, startIndex }: ShortsFeedProps) {
   return (
     <div className="feed">
       <FeedChrome
-        brand={currentSlide?.content?.brand ?? '데일리 비트코인'}
+        brand={currentSlide?.content?.brand ?? '데일리 AI'}
         date={currentSlide?.date ?? startDate}
         localIndex={currentSlide?.localIndex ?? 0}
         localTotal={currentSlide?.localTotal ?? 1}

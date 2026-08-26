@@ -1,32 +1,32 @@
 {
   "meta": {
-    "title": "비트코인 하이라이트 · 7.30",
-    "slug": "btc-daily-0730",
+    "title": "AI 하이라이트 · 7.30",
+    "slug": "ai-daily-0730",
     "date": "2026-07-30"
   },
   "theme": {
-    "bg": "#181410",
-    "bg2": "#211a13",
-    "bg_light": "#e8e0d4",
-    "bg2_light": "#dcd2c1",
-    "paper": "#f4efe4",
-    "paper2": "#e9e2d2",
-    "ink": "#201c14",
-    "ink_dim": "#6b6354",
-    "accent": "#f2a93b",
-    "accent_strong": "#ffcf7f",
-    "glow": "rgba(242,169,59,0.20)",
-    "accent2": "#d95f4a",
-    "accent2_light": "#b84a37",
-    "line": "#cabfa5",
-    "chip_bg": "rgba(32,28,20,0.05)",
+    "bg": "#0c1214",
+    "bg2": "#111a1d",
+    "bg_light": "#e6ecec",
+    "bg2_light": "#d8e2e2",
+    "paper": "#f2f6f5",
+    "paper2": "#e5eceb",
+    "ink": "#101a1b",
+    "ink_dim": "#5c6d6f",
+    "accent": "#3fc9d6",
+    "accent_strong": "#8ee8f0",
+    "glow": "rgba(63,201,214,0.20)",
+    "accent2": "#d98a68",
+    "accent2_light": "#a8613f",
+    "line": "#b8c8c8",
+    "chip_bg": "rgba(16,26,27,0.05)",
     "seg_off": "rgba(255,255,255,0.14)"
   },
-  "brand": "데일리 비트코인",
+  "brand": "데일리 AI",
   "cover": {
     "eyebrow": "데일리 다이제스트",
     "mark": [
-      "비트코인",
+      "AI",
       "하이라이트"
     ],
     "meta": [
@@ -34,31 +34,31 @@
       "뉴스 + 유튜브",
       "2026.07.30"
     ],
-    "hint": "위로 넘겨서 오늘의 비트코인 이슈 10건 보기"
+    "hint": "위로 넘겨서 오늘의 AI 이슈 10건 보기"
   },
   "cards": [
     {
       "num": 1,
       "chip": {
-        "text": "시황",
+        "text": "칩",
         "emphasis": "primary"
       },
-      "title": "연준 금리 동결에도 비트코인은 밀렸다",
-      "subtitle": "Fed Holds, BTC Slides",
-      "chips_label": "TAGS",
+      "title": "엔비디아 블랙웰을 앞섰다는 오픈AI 첫 자체 칩",
+      "subtitle": "OpenAI Unveils Jalapeno",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#비트코인",
-        "#연준",
-        "#중동긴장"
+        "#할라페뇨",
+        "#추론칩",
+        "#브로드컴"
       ],
-      "body": "연준이 기준금리를 동결했지만 비트코인은 호재를 삼키지 못했다. 이란의 미군 기지 미사일 공격으로 중동 긴장이 고조되고 유가가 8% 급등하자 비트코인은 6만4000달러선을 반납하고 6만3500달러대까지 밀렸다. 이더리움을 포함한 알트코인 낙폭은 더 컸다.",
-      "quote": "금리는 멈췄는데, 시장은 안 멈췄다.",
+      "body": "오픈AI가 브로드컴과 함께 만든 자체 추론칩 '할라페뇨'의 벤치마크를 공개했습니다. 와트당 처리량과 응답속도에서 엔비디아 블랙웰을 앞섰다고 밝혔습니다. 다만 엔비디아 가속기를 걷어내는 것은 아니고 병행해 쓴다는 점도 함께 못박았습니다.",
+      "quote": "직접 만들겠다는 선언이 아니라, 협상 카드를 하나 더 쥐었다는 신호에 가깝습니다.",
       "link": {
-        "label": "블록미디어 원문",
-        "href": "https://www.blockmedia.co.kr/archives/1122156?utm_source=general&utm_medium=rss"
+        "label": "토큰포스트 원문",
+        "href": "https://www.tokenpost.kr/news/ai/397706"
       },
       "media": {
-        "image": "fed-macro",
+        "image": "https://f1.tokenpost.kr/2026/08/stvbiyfb49.jpg",
         "href": null,
         "cta": null
       }
@@ -66,25 +66,25 @@
     {
       "num": 2,
       "chip": {
-        "text": "온체인",
-        "emphasis": "secondary"
+        "text": "시장",
+        "emphasis": null
       },
-      "title": "6만4000달러 지지선, 매수 동력이 한꺼번에 멈췄다",
-      "subtitle": "Demand Stall",
-      "chips_label": "TAGS",
+      "title": "실적 하루 전, 7거래일 연속 밀린 엔비디아",
+      "subtitle": "Nvidia Slides Into Earnings",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#비트코인",
-        "#ETF",
-        "#지지선"
+        "#엔비디아",
+        "#실적",
+        "#10년물"
       ],
-      "body": "비트코인의 6만4000달러 지지선을 떠받치던 세 축 — ETF 자금, 선물 매수, 온체인 자본 유입 — 이 동시에 정체됐다. ETF에서는 자금이 빠져나가고 선물 매수세는 둔화됐으며 온체인 신규 자본 유입도 멎었다. 결국 지지선을 지키는 건 장기 보유자들만 남았다는 분석이다.",
-      "quote": "받쳐주던 세 다리가 한꺼번에 풀렸다.",
+      "body": "엔비디아가 4년 만에 7거래일 연속 하락했습니다. 미국 10년물 국채금리 4.64%와 함께 위험자산을 움직이는 두 축으로 거론되는 상황에서, 실적 발표를 앞두고 AI주에서 자금이 빠졌습니다. 나스닥도 0.76% 내렸습니다.",
+      "quote": "오르막에서는 안 보이던 밸류에이션이 실적 하루 전에 보이기 시작했습니다.",
       "link": {
-        "label": "CryptoSlate 원문",
-        "href": "https://cryptoslate.com/three-key-demand-drivers-stall-at-once-leaving-bitcoins-64000-support-to-long-term-holders/"
+        "label": "토큰포스트 원문",
+        "href": "https://www.tokenpost.kr/news/economy/397786"
       },
       "media": {
-        "image": "demand-stall",
+        "image": "https://f1.tokenpost.kr/2026/08/wcw7uxkgqq.jpg",
         "href": null,
         "cta": null
       }
@@ -92,25 +92,25 @@
     {
       "num": 3,
       "chip": {
-        "text": "레버리지",
-        "emphasis": null
+        "text": "모델",
+        "emphasis": "secondary"
       },
-      "title": "7억 달러 청산 — 롱 베팅이 무너졌다",
-      "subtitle": "$700M Liquidation",
-      "chips_label": "TAGS",
+      "title": "매개변수 10조 개로 사전학습을 끝냈다는 차세대 모델",
+      "subtitle": "A 10T-Parameter Rumor",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#비트코인",
-        "#레버리지청산",
-        "#롱베팅"
+        "#오픈AI",
+        "#매개변수",
+        "#스케일링"
       ],
-      "body": "암호화폐 시장에서 하루 만에 7억 달러 규모의 레버리지 포지션이 청산됐다. 청산 직전 롱 포지션 비중이 62%까지 쏠렸던 과열 베팅이 무너진 결과다. 이 와중에도 비트코인의 시장 점유율은 오히려 올랐다.",
-      "quote": "몰빵한 쪽이 먼저 터졌다.",
+      "body": "오픈AI의 차세대 모델 '벨'이 10조 개 이상 매개변수로 사전학습을 마쳤다는 이야기가 돌고 있습니다. 공식 공개 예정작은 '아스트라'로 알려져 있습니다. 초대형 모델 경쟁이 다시 붙으면서 안전 통제를 어디까지 담보할 수 있느냐는 물음도 같이 올라왔습니다.",
+      "quote": null,
       "link": {
-        "label": "TokenPost 원문",
-        "href": "https://www.tokenpost.kr/news/insights/382774"
+        "label": "토큰포스트 원문",
+        "href": "https://www.tokenpost.kr/news/ai/397869"
       },
       "media": {
-        "image": "liquidation",
+        "image": "https://f1.tokenpost.kr/2026/08/7rnzmwr3dv.jpg",
         "href": null,
         "cta": null
       }
@@ -118,25 +118,25 @@
     {
       "num": 4,
       "chip": {
-        "text": "채굴",
+        "text": "상장",
         "emphasis": "primary"
       },
-      "title": "채굴업계, AI로 갈아타는 중 — \"1년 뒤 후회할 수도\"",
-      "subtitle": "Miners Pivot to AI",
-      "chips_label": "TAGS",
+      "title": "IPO 서사로 앤트로픽이 내건 숫자, 30조 달러",
+      "subtitle": "Anthropic's TAM Pitch",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#비트코인채굴",
-        "#AI전환",
-        "#데이터센터"
+        "#앤트로픽",
+        "#IPO",
+        "#TAM"
       ],
-      "body": "비트코인 채굴업체들이 잇달아 데이터센터를 AI 호스팅용으로 전환하고 있다. 코어 사이언티픽은 채굴 수익이 56% 줄었지만 AI 호스팅 전환으로 8000만 달러 이익을 냈다. 다만 과잉 투자로 전환할 경우 비트코인 가격이 회복될 때 되돌릴 선택권을 잃을 수 있다는 경고도 함께 나온다.",
-      "quote": "지금은 맞는 것 같은 선택, 1년 뒤엔?",
+      "body": "앤트로픽이 상장을 앞두고 총유효시장을 30조 달러로 제시했다고 월스트리트저널이 전했습니다. 스페이스X를 넘어서는 기업가치가 거론됩니다. 기업의 모델 지출이 6월 이후 40% 가까이 늘었다는 집계가 이 서사를 받치고 있습니다.",
+      "quote": "시장 규모를 크게 그리는 것과 그 시장을 가져오는 것은 다른 일입니다.",
       "link": {
-        "label": "CryptoSlate 원문",
-        "href": "https://cryptoslate.com/bitcoin-miners-pour-billions-into-ai-but-the-pivot-could-leave-them-regretting-it-within-a-year/"
+        "label": "블록미디어 원문",
+        "href": "https://www.blockmedia.co.kr/archives/1132061"
       },
       "media": {
-        "image": "miners-ai",
+        "image": "https://cdn.blockmedia.co.kr/wp-content/uploads/2026/06/20260613-105518-scaled.jpg",
         "href": null,
         "cta": null
       }
@@ -144,25 +144,25 @@
     {
       "num": 5,
       "chip": {
-        "text": "기관",
+        "text": "보안",
         "emphasis": null
       },
-      "title": "\"공짜 수익의 시대는 끝났다\" — 신임 CEO의 경고",
-      "subtitle": "Treasury Arbitrage Fading",
-      "chips_label": "TAGS",
+      "title": "오픈웨이트로 지키려다 뚫린 허깅페이스",
+      "subtitle": "The Open-Weight Paradox",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#비트코인",
-        "#기관투자",
-        "#트레저리전략"
+        "#허깅페이스",
+        "#오픈웨이트",
+        "#보안"
       ],
-      "body": "비트코인 재무 전략으로 차익거래 수익을 노리던 '트레저리 플레이북' 시대가 저물고 있다는 경고가 나왔다. 트웬티원 캐피탈의 신임 CEO는 이제 채굴처럼 실제 현금을 창출하는 사업이 더 나은 위험 조정 수익을 줄 수 있다고 밝혔다.",
-      "quote": "공짜 점심은 없다, 비트코인도 예외가 아니다.",
+      "body": "허깅페이스가 중국산 오픈웨이트 모델로 보안을 강화하던 중 해킹당했습니다. 앨라배마 주 법무장관이 오픈AI에 소환장을 보내 조사에 들어갔습니다. 가중치를 공개할수록 검증이 쉬워지지만 공격면도 같이 넓어진다는 오래된 딜레마가 사건으로 드러났습니다.",
+      "quote": null,
       "link": {
-        "label": "CryptoSlate 원문",
-        "href": "https://cryptoslate.com/theres-no-free-money-forever-twenty-one-capitals-new-ceo-warns-the-bitcoin-treasury-playbook-is-dying/"
+        "label": "Cointelegraph 원문",
+        "href": "https://cointelegraph.com/features/hugging-face-hack-exposes-the-open-weight-ai-cybersecurity-paradox"
       },
       "media": {
-        "image": "treasury-warn",
+        "image": "https://s3-images.ctmedia.io/media/article-covers/wp-cover-30445-creating-good-agi-that-wont-kill-us-all-with-crypto-artifici-960x540.webp",
         "href": null,
         "cta": null
       }
@@ -170,51 +170,47 @@
     {
       "num": 6,
       "chip": {
-        "text": "MSTR",
+        "text": "전쟁",
         "emphasis": "secondary"
       },
-      "title": "110억 달러 손실에도 \"연 42% 수익\" — 근데 두 달새 66%↓",
-      "subtitle": "Strategy's Mixed Signals",
-      "chips_label": "TAGS",
+      "title": "민간인 사망까지 간 우크라 전장의 자율살상 드론",
+      "subtitle": "Autonomous Killers at the Front",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#MSTR",
-        "#스트래티지",
-        "#마이클세일러"
+        "#자율살상",
+        "#드론",
+        "#우크라이나"
       ],
-      "body": "스트래티지(옛 마이크로스트래티지)는 110억 달러 규모의 평가손실에도 비트코인 전환 이후 연평균 42% 수익률을 냈다고 자신했다. 하지만 같은 시기 다른 집계에서는 비트코인 수익률이 두 달 새 66% 급감했다는 지적도 나와, 보유 모델의 지속가능성을 둘러싼 논쟁이 커지고 있다.",
-      "quote": "같은 숫자를 두고 자신감과 의심이 엇갈린다.",
+      "body": "러시아가 표적을 스스로 고르는 AI 드론을 전장에 투입했고 민간인 사망이 확인됐습니다. 해당 기체에 엔비디아 칩이 탑재된 정황도 함께 보도됐습니다. 우크라이나는 사상 첫 무인 열병식을 열었습니다. 여섯 개 매체가 같은 날 이 사건을 다뤘습니다.",
+      "quote": "사람이 방아쇠를 당기지 않은 첫 사례가 기록으로 남았습니다.",
       "link": {
-        "label": "블록미디어 원문",
-        "href": "https://www.blockmedia.co.kr/archives/1122047?utm_source=general&utm_medium=rss"
+        "label": "서울신문 원문",
+        "href": "https://www.seoul.co.kr/"
       },
-      "media": {
-        "image": "mstr",
-        "href": null,
-        "cta": null
-      }
+      "media": null
     },
     {
       "num": 7,
       "chip": {
-        "text": "규제",
-        "emphasis": "primary"
+        "text": "인프라",
+        "emphasis": null
       },
-      "title": "CLARITY 법안, 상원 강경론 vs 트럼프 개인 사업 충돌",
-      "subtitle": "CLARITY Act at Risk",
-      "chips_label": "TAGS",
+      "title": "우주로 올라가는 AI 데이터센터",
+      "subtitle": "Datacenters in Orbit",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#CLARITY법",
-        "#암호화폐규제",
-        "#트럼프"
+        "#스페이스X",
+        "#베라루빈",
+        "#위성"
       ],
-      "body": "암호화폐 규제의 이정표로 꼽히는 CLARITY 법안을 둘러싸고 상원 일각에서는 트럼프 행정부의 제한 완화 양보안을 더 강경하게 되돌리자는 움직임이 나온다. 동시에 트럼프 개인 사업 이해관계가 오히려 이 법안 통과를 위협할 수 있다는 분석도 나오며, 법안의 향방이 안갯속이다.",
-      "quote": "규제를 흔든 건 야당이 아니라 이해충돌이었다.",
+      "body": "스페이스X가 AI 위성 '스타마인드'에 엔비디아 베라 루빈을 적용하고 2027년 발사를 예고했습니다. 머스크는 내년 4분기 첫 위성을 띄우고 2028년에 규모를 키우겠다고 밝혔습니다. 지상 전력망 제약을 궤도로 우회하려는 시도입니다.",
+      "quote": null,
       "link": {
-        "label": "CryptoSlate 원문",
-        "href": "https://cryptoslate.com/crypto-was-warned-that-trump-could-politicize-the-industry-clarity-is-testing-that-bet/"
+        "label": "토큰포스트 원문",
+        "href": "https://www.tokenpost.kr/news/cryptocurrency/397267"
       },
       "media": {
-        "image": "clarity-trump",
+        "image": "https://f1.tokenpost.kr/2026/08/pw9dxme57i.jpg",
         "href": null,
         "cta": null
       }
@@ -222,83 +218,75 @@
     {
       "num": 8,
       "chip": {
-        "text": "온체인",
-        "emphasis": null
+        "text": "에이전트",
+        "emphasis": "primary"
       },
-      "title": "고래는 사고, 개미는 다른 길을 간다",
-      "subtitle": "Whale vs Retail Divergence",
-      "chips_label": "TAGS",
+      "title": "1년 새 1700% 늘어난 AI 에이전트 트래픽",
+      "subtitle": "Agent Traffic Up 1700%",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#비트코인",
-        "#온체인",
-        "#고래지갑"
+        "#클라우드플레어",
+        "#에이전트",
+        "#트래픽"
       ],
-      "body": "온체인 데이터에서 10~1만 비트코인을 보유한 '고래' 지갑들이 최근 8일간 약 1만9700 비트코인을 사들인 것으로 나타났다. 반면 소매 투자자들의 매매 패턴은 이와 다른 방향을 보이며, 두 집단의 디커플링이 뚜렷해지고 있다는 관측이 나온다.",
-      "quote": null,
+      "body": "클라우드플레어가 자사 네트워크를 지나는 AI 에이전트 트래픽이 1년 만에 1700% 늘었다고 밝혔습니다. 사람이 아닌 클라이언트가 웹을 읽는 비중이 그만큼 커졌다는 뜻입니다. 접근 제어와 데이터 통합 관리를 대응 전략으로 제시했습니다.",
+      "quote": "웹의 독자가 사람에서 에이전트로 옮겨가는 속도가 숫자로 찍혔습니다.",
       "link": {
-        "label": "Reddit 토론 보기",
-        "href": "https://old.reddit.com/r/Bitcoin/comments/1v9rh1c/onchain_data_shows_a_divergence_between_whale_and/"
+        "label": "바이라인네트워크 원문",
+        "href": "https://byline.network/"
       },
       "media": null
     },
     {
       "num": 9,
       "chip": {
-        "text": "보안",
-        "emphasis": "secondary"
+        "text": "파운드리",
+        "emphasis": null
       },
-      "title": "양자 컴퓨터 대비, 하나는 깨지고 하나는 나왔다",
-      "subtitle": "Post-Quantum Bitcoin",
-      "chips_label": "TAGS",
+      "title": "삼성 파운드리가 전담하는 엔비디아 추론칩 양산",
+      "subtitle": "Samsung Takes the Line",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#비트코인",
-        "#양자컴퓨터",
-        "#암호화"
+        "#삼성파운드리",
+        "#그록3",
+        "#양산"
       ],
-      "body": "비트코인의 양자내성 주소 후보로 거론되던 HAWK 알고리즘이 실제로 해킹당하며 취약점이 드러났다. 거의 같은 시점에 연구진은 미래 양자 공격으로부터 비트코인을 지킬 새로운 암호화 방식을 제안하며, 양자 대비 경쟁이 계속되고 있음을 보여줬다.",
-      "quote": "방패 하나가 깨지자, 다른 방패가 나왔다.",
+      "body": "엔비디아가 에이전틱 AI용 추론 가속기 '그록 3 LPX' 양산에 들어갔고 삼성 파운드리가 이를 전담합니다. 가동률이 올라가면서 파운드리 부문 흑자전환 기대가 나옵니다. 오픈AI 자체 칩에 삼성 HBM4가 실린다는 관측도 같은 날 붙었습니다.",
+      "quote": null,
       "link": {
-        "label": "Decrypt 원문",
-        "href": "https://decrypt.co/374651/new-research-bitcoin-wallet-quantum-attacks-safe"
+        "label": "동아일보 원문",
+        "href": "https://www.donga.com/"
       },
-      "media": {
-        "image": "quantum",
-        "href": null,
-        "cta": null
-      }
+      "media": null
     },
     {
       "num": 10,
       "chip": {
-        "text": "유튜브 화제",
-        "emphasis": "primary"
+        "text": "인사",
+        "emphasis": "secondary"
       },
-      "title": "\"클래리티 법안이 무너지고 있다\" — 유튜브도 들썩",
-      "subtitle": "YouTube: Clarity Act Chaos",
-      "chips_label": "TAGS",
+      "title": "IPO 앞둔 오픈AI에서 떠난 데이터센터 총괄",
+      "subtitle": "OpenAI Loses Its DC Chief",
+      "chips_label": "관련 키워드",
       "chips": [
-        "#CLARITY법",
-        "#유튜브화제",
-        "#CoinBureau"
+        "#오픈AI",
+        "#데이터센터",
+        "#임원이탈"
       ],
-      "body": "크립토 유튜브 채널들 사이에서 CLARITY 법안 처리가 좌초 위기에 놓였다는 소식이 빠르게 퍼졌다. Coin Bureau는 이를 \"역대 최대 암호화폐 법안의 붕괴\"라 표현했고, 국내 채널들도 연준 FOMC 생방송과 함께 이 이슈를 실시간으로 다뤘다.",
-      "quote": "법안 하나에 유튜브 전체가 반응했다.",
+      "body": "오픈AI 데이터센터 사업을 이끌던 크리스 말론이 회사를 떠났습니다. 상장을 앞두고 핵심 임원 이탈이 이어지는 흐름의 연장선입니다. 전력과 부지 확보가 기업가치를 가르는 국면이라 이 자리의 공백이 특히 눈에 띕니다.",
+      "quote": "돈보다 전력과 부지가 병목인 회사에서, 그 일을 맡던 사람이 나갔습니다.",
       "link": {
-        "label": "Coin Bureau 영상",
-        "href": "https://youtu.be/A2VlNi3i248"
+        "label": "알파경제 원문",
+        "href": "https://www.alphabiz.co.kr/"
       },
-      "media": {
-        "image": "clarity-yt",
-        "href": null,
-        "cta": null
-      }
+      "media": null
     }
   ],
   "closing": {
     "eyebrow": "SUMMARY",
     "mark_lines": [
       "데일리",
-      "비트코인"
+      "AI"
     ],
     "links": [
       {
@@ -313,12 +301,12 @@
     "stamp": "오늘의 발행 완료",
     "restart": "처음부터 다시 보기 ↺",
     "sources": [
-      "CryptoSlate",
-      "TokenPost",
-      "BlockMedia",
-      "Decrypt",
-      "Reddit",
-      "Coin Bureau"
+      "TechCrunch",
+      "지디넷코리아",
+      "GeekNews",
+      "The Verge",
+      "인공지능신문",
+      "AI타임스"
     ],
     "disclaimer": "카드뉴스 속 기사 내용은 한입비트코인의 의견과는 무관합니다."
   }

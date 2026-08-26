@@ -7,32 +7,38 @@
 여기서 잡는 건 **표에 적힌 것뿐이다.** 오역이나 어색한 음차처럼 판단이 필요한 문제는
 잡지 못한다 — 그건 리뷰 에이전트(2층)의 몫이다.
 
-계약 발효일 이전 발행분은 검사하지 않는다. 07-27~08-06 에디션은 평서체로 나갔고
-제목에 "BTC"를 쓴 것도 있어서, 소급 적용하면 오타 하나 고치려는 재발행이 막힌다.
+btc-daily-web 에서 갈라져 나오면서 발효일 예외를 걷어냈다. 저쪽은 규칙보다 먼저 나간
+발행분이 있어 소급 적용을 피해야 했지만, 여기는 첫 발행부터 규칙이 있으므로 전부
+검사한다.
 """
 
 import datetime
-import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # 런타임 임포트는 순환을 만든다 (schemas -> wording 방향이 열려 있어야 함)
     from app.schemas import EditionContent
 
-# CONTENT_CONTRACT.md 2.1·2.2가 발효된 날. 이 날짜 이전 meta.date는 통과시킨다.
-EFFECTIVE_DATE = datetime.date(2026, 8, 7)
-
-# 제목 명사형 종결(2.1.1)은 나중에 들어왔다. EFFECTIVE_DATE 를 재사용하면 08-07~08-17
-# 발행분 90장이 전부 걸려 오타 수정 재발행이 막힌다 — 규칙마다 발효일을 따로 둔다.
-TITLE_RULE_DATE = datetime.date(2026, 8, 18)
+# 이 프로젝트는 첫 발행부터 계약이 있다. 발효일 예외가 없다는 걸 코드로 남겨둔다 —
+# 나중에 규칙을 추가할 때만 그 규칙의 발효일을 여기 옆에 새로 세운다.
+EFFECTIVE_DATE = datetime.date.min
+TITLE_RULE_DATE = datetime.date.min
 
 # 쓰면 안 되는 표기 -> 써야 하는 표기. CONTENT_CONTRACT.md 2.2와 같은 내용을 유지한다.
+#
+# AI 도메인은 고유명사가 매일 새로 들어오고 매체마다 음차가 갈린다. 아래는 지어낸
+# 목록이 아니라 2026-08-26 하루치 asset=ai 응답 500건에서 실제로 갈린 것들이다.
+# 괄호 안이 그날 등장 횟수다. 카드가 어느 쪽을 쓰든 틀린 건 아니지만, 매일 다른 쪽을
+# 쓰면 같은 회사가 다른 회사처럼 읽힌다 — 한쪽으로 고정하는 게 이 표의 일이다.
 BANNED_TERMS: dict[str, str] = {
-    "갈럭시": "갤럭시",
+    "앤스로픽": "앤트로픽",  # 5 vs 45
+    "할라피뇨": "할라페뇨",  # 9 vs 6 — 다수파가 아닌 쪽을 골랐다. 스페인어 jalapeño 의
+    #                          한국어 외래어 표기가 '할라페뇨'다.
+    "제미니": "제미나이",  # 1 vs 3
+    "데이터 센터": "데이터센터",  # 2 vs 64
+    "챗지피티": "챗GPT",
+    "오픈에이아이": "오픈AI",
+    "라마3": "라마 3",
 }
-
-# 한국어 문장 안의 "BTC" 금지 (프로젝트 CLAUDE.md 규칙). 단어 경계를 봐야
-# "BTCUSD" 같은 티커나 소문자 slug("btc-daily-0807")를 오탐하지 않는다.
-BTC_TOKEN = re.compile(r"(?<![A-Za-z])BTC(?![A-Za-z])")
 
 # 했습니다체 판정. "니다로 끝나는가"만 보면 **평서체 "아니다"가 통과한다** — 아/니/다도
 # "니다"로 끝나기 때문이다. 진짜 구분점은 "니다" 앞 음절의 종성이 ㅂ인지다:
@@ -61,8 +67,7 @@ def _check_text(where: str, text: str | None, problems: list[str]) -> None:
     for banned, correct in BANNED_TERMS.items():
         if banned in text:
             problems.append(f"{where}: '{banned}' -> '{correct}' 로 고쳐라 ({text.strip()!r})")
-    if BTC_TOKEN.search(text):
-        problems.append(f"{where}: 한국어 문구에 'BTC' 금지 -> '비트코인' ({text.strip()!r})")
+
 
 
 def _check_ending(where: str, text: str | None, problems: list[str]) -> None:
@@ -105,9 +110,9 @@ def find_problems(content: "EditionContent") -> list[str]:
     매체명인 `link.label`, 기사 원제를 그대로 옮기는 `trending.items[].links[].title`
     은 제외한다 — 원제를 다듬는 건 계약이 금지한 행위라 여기서 걸면 안 된다.
 
-    `cover.quote`도 제외다. 표지 인용구는 미제스·하이에크의 말을 옮긴 번역문이라
-    했습니다체로 고칠 대상이 아니다("…없습니다"라고 말한 적이 없다). 여기에 커버를
-    추가하려는 시도는 `test_wording.py`가 막는다.
+    `cover.quote`도 제외다. 표지 인용구는 튜링·섀넌의 말을 옮긴 번역문이라 했습니다체로
+    고칠 대상이 아니다("…없습니다"라고 말한 적이 없다). 여기에 커버를 추가하려는
+    시도는 `test_wording.py`가 막는다.
     """
     if content.meta.date < EFFECTIVE_DATE:
         return []

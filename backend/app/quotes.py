@@ -1,8 +1,10 @@
-"""표지에 매일 한 줄씩 나가는 오스트리아학파 인용구 풀과 선택 로직.
+"""표지에 매일 한 줄씩 나가는 AI·컴퓨팅 인용구 풀과 선택 로직.
 
-**인용구를 LLM이 매일 생성하지 않는 이유**: 인용구는 오귀속이 흔한 장르다. "미제스
-인용구 하나 써줘"라고 하면 미제스가 하지 않은 말이 미제스 이름으로 발행되고, 그건
-되돌릴 수 없다. 그래서 출처가 확인된 고정 풀에서 고른다.
+**인용구를 LLM이 매일 생성하지 않는 이유**: 인용구는 오귀속이 흔한 장르다. "튜링
+인용구 하나 써줘"라고 하면 튜링이 하지 않은 말이 튜링 이름으로 발행되고, 그건
+되돌릴 수 없다. 그래서 출처가 확인된 고정 풀에서 고른다. 이 도메인은 특히 위험한데,
+"컴퓨터과학은 망원경이 천문학인 만큼만 컴퓨터에 관한 것"처럼 널리 퍼진 문장 상당수가
+데이크스트라에게 잘못 붙은 것들이다 — 그런 건 풀에 넣지 않았다.
 
 `en`/`work`/`year`는 카드에 렌더하지 않지만 "이거 진짜 그 사람 말 맞나"를 나중에
 확인할 근거로 파일에 남긴다. `portrait_*`도 같은 이유 — 초상 라이선스의 근거다.
@@ -14,7 +16,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-DATA_FILE = Path(__file__).resolve().parent / "data" / "austrian_quotes.json"
+DATA_FILE = Path(__file__).resolve().parent / "data" / "ai_quotes.json"
 
 
 @dataclass(frozen=True)

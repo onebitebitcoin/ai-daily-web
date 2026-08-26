@@ -102,7 +102,7 @@ def _request_origin(request: Request) -> str:
 
 def render_og_html(content: dict[str, Any], date_iso: str, request: Request) -> str:
     origin = _request_origin(request)
-    title = html.escape(f"{content['meta']['title']} · 데일리 비트코인")
+    title = html.escape(f"{content['meta']['title']} · 데일리 AI")
     description = html.escape(build_og_description(content))
     image_url = html.escape(f"{origin}/api/og/{date_iso}/image.jpg")
     page_url = html.escape(f"{origin}/d/{date_iso}")
@@ -114,7 +114,7 @@ def render_og_html(content: dict[str, Any], date_iso: str, request: Request) -> 
     <title>{title}</title>
     <meta name="description" content="{description}" />
     <meta property="og:type" content="article" />
-    <meta property="og:site_name" content="데일리 비트코인" />
+    <meta property="og:site_name" content="데일리 AI" />
     <meta property="og:title" content="{title}" />
     <meta property="og:description" content="{description}" />
     <meta property="og:image" content="{image_url}" />

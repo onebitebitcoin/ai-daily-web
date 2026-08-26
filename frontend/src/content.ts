@@ -5,7 +5,7 @@
  */
 import type { Theme } from './useThemeVars';
 
-/** 표지 하단에 매일 한 줄씩 나가는 오스트리아학파 인용구.
+/** 표지 하단에 매일 한 줄씩 나가는 AI·컴퓨팅 인용구.
  *
  *  `portrait`는 번들 asset stem(`assets/portraits/`)이다. 퍼블릭 도메인 초상을
  *  구할 수 있는 인물만 값이 있고, 나머지는 null이라 이름을 조판한 아바타가 나간다. */
