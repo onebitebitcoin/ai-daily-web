@@ -1,17 +1,22 @@
-"""Collect BTC news(24h)/youtube(48h) candidates and write a draft skeleton.
+"""Collect AI news(36h)/youtube(48h) candidates and write a draft skeleton.
 
 Deterministic only — no LLM calls. Fills every field of an edition that doesn't
 require judgement (meta/theme/brand/cover/closing) and dumps ranked candidates
 for a human (or a Claude Code session) to pick 10 cards from.
 
---date 를 오늘이 아닌 과거로 주면 "지금부터 24h"가 아니라 그 날짜(KST) 자정까지의
-24h 창으로 자동 전환된다(백필). 단, 소스 API 는 최신순 정렬이라 며칠 전 날짜는
+btc-daily-web 의 같은 파일에서 갈라져 나왔다. 필터·버킷·트렌딩 점수 공식은 그대로고
+도메인 용어집 세 벌(AI_TERMS / CRYPTO_TERMS / INDUSTRY_TERMS)과 영상 topic 만 다르다.
+AI 쪽에만 있는 로직은 매체 간 사건 클러스터링(cluster_events)이다 — 2026-08-26
+드라이런에서 오픈AI 할라페뇨 칩 한 건이 후보 100칸 중 8칸을 먹었다.
+
+--date 를 오늘이 아닌 과거로 주면 "지금부터 36h"가 아니라 그 날짜(KST) 자정까지의
+창으로 자동 전환된다(백필). 단, 소스 API 는 최신순 정렬이라 며칠 전 날짜는
 기본 --news-url 의 limit=500 으로 안 닿을 수 있다 — limit 을 넉넉히 올려서 넘겨라.
 
 Usage: python scripts/collect_daily.py [--date YYYY-MM-DD] [--out PATH]
                                         [--news-url URL] [--youtube-url URL]
-       python scripts/collect_daily.py --date 2026-07-27 \
-           --news-url "http://localhost:8000/api/news?asset=btc&limit=1000"
+       python scripts/collect_daily.py --date 2026-08-20 \
+           --news-url "http://localhost:8000/api/news?asset=ai&limit=1000"
 """
 
 import argparse
@@ -42,89 +47,122 @@ from app.quotes import as_cover_quote, is_exhausted, load_pool, pick_quote  # no
 from app.trending import rank_topics  # noqa: E402  (sys.path 조정 후여야 함)
 from scripts.recent_editions import fetch_dates, fetch_edition  # noqa: E402
 
-DEFAULT_NEWS_URL = "http://localhost:8000/api/news?asset=btc&limit=500"
+DEFAULT_NEWS_URL = "http://localhost:8000/api/news?asset=ai&limit=500"
 # 트렌딩 집계는 카드 후보와 목적이 다르다 — 카드는 "쓸 만한 10건"을 고르지만
-# 집계는 24시간에 무슨 일이 있었는지 전부 봐야 한다. 같은 소스를 따로, 넓게 받는다
-# (2026-08-05 실측: 24h 코퍼스 205건인데 카드 후보 필터를 거치면 20건만 남았다).
-DEFAULT_TRENDING_NEWS_URL = "http://localhost:8000/api/news?asset=btc&limit=500"
-# 매크로 보강 풀. my-news 의 asset=btc 는 달러·금리·연준 기사를 상당수 놓친다
-# (2026-08-24 실측: 워시 첫 잭슨홀 연설, 연준의 10년 초과 국채 1.62조달러 보유,
-# 빅테크 회사채가 국채금리를 밀어올린 건이 전부 asset=btc 밖에 있었다).
-# 그래서 asset 필터 없이 한 번 더 받되 **macro 등급만** 취한다 — 이 피드는 AI·일반
-# 뉴스가 대부분이고, 그중 일부는 내용과 무관한 tags:['bitcoin'] 이 붙어 있어
-# 그대로 두면 야구 기사가 btc 등급으로 샌다(실측). 등급 제한이 그 방어선이다.
-DEFAULT_MACRO_NEWS_URL = "http://localhost:8000/api/news?limit=500"
+# 집계는 24시간에 무슨 일이 있었는지 전부 봐야 한다. 같은 소스를 따로, 넓게 받는다.
+DEFAULT_TRENDING_NEWS_URL = "http://localhost:8000/api/news?asset=ai&limit=500"
+# 산업 보강 풀. my-news 의 asset=ai 는 반도체·전력 기사를 상당수 놓친다 — 디일렉·
+# 올포칩·에너지경제처럼 "AI" 를 제목에 안 쓰고 HBM·파운드리·전력망만 말하는 매체가
+# 그렇다. 그래서 asset 필터 없이 한 번 더 받되 **industry 등급만** 취한다.
+# btc 등급 대신 ai 등급을 버리는 것도 같은 이유다: 비트코인 기사가 대부분인 이
+# 피드에서 ai 등급까지 주우면 코인 시황이 후보 상단으로 샌다.
+DEFAULT_BROAD_NEWS_URL = "http://localhost:8000/api/news?limit=500"
 # full=1 없으면 my-youtube 가 summary/highlights/description 을 뺀 경량 응답을 준다.
 # 그러면 filter_videos 의 `summary` 조건에 전부 걸려 후보가 조용히 0건이 된다(2026-08-05).
 DEFAULT_YOUTUBE_URL = "http://localhost:23456/api/queue?full=1"
-# 표지 인용구 중복 회피는 "실제로 발행된 것"을 봐야 한다 — 로컬 DB는 리허설 발행까지
-# 섞여 있어 기준이 안 된다. 그래서 다른 소스와 달리 기본값이 프로덕션이다.
-DEFAULT_EDITION_API = "https://daily.onebitebitcoin.com"
+# 표지 인용구·영상·이미지 중복 회피가 읽는 발행 이력. btc-daily-web 은 프로덕션을
+# 기본값으로 두지만 여기는 아직 배포 도메인이 없다 — 로컬 백엔드(8003)를 본다.
+# 도메인이 정해지면 이 한 줄과 .env.example 의 DOMAIN, deploy/nginx/DOMAIN*.conf 를
+# 같이 채운다.
+DEFAULT_EDITION_API = "http://localhost:8003"
 # 카드 후보 뉴스 창. 트렌딩 집계 창(24h)과 다르다 — 집계는 "그날 무슨 일이
 # 있었나"라서 하루로 잘라야 맞지만, 카드 후보는 고를 게 많을수록 좋다.
-# 2026-08-24 실측: 24h 는 btc 등급 69건인데 36h 로 늘리면 108건이 된다.
 # 영상 창(VIDEO_WINDOW_HOURS)이 이미 48h 인 것과 같은 취지다.
 NEWS_WINDOW_HOURS = 36
-# 후보 수. 2026-08-24 실측으로 20에서 올렸다 — 그날 24h 코퍼스 108건 중 20건만
-# 후보가 됐고, 잘려나간 88건 안에 그날 트렌딩 1위였던 CFTC 비트코인 무기한선물
-# 승인, 비트코인 코어 암호화 라우팅 재검토, 채굴사 IPO 가 전부 들어 있었다.
-# 창을 36h 로 넓히면 btc 등급이 108건이라 60 으로는 다시 꼬리가 잘린다 — 창을
-# 넓힌 의미가 없어지므로 같이 올린다. 비용은 후보당 이미지 1장 다운로드인데
-# 디스크 캐시가 있어 배치가 몇십 초 길어지는 정도다.
+# 후보 수. **클러스터링 이후** 기준이다 — cluster_events 가 같은 사건을 접은 다음
+# 세므로, 여기서 100 이면 서로 다른 사건 100건을 뜻한다. 2026-08-26 드라이런에서
+# 클러스터링 없이 100 을 세었더니 실제 사건은 60건 남짓이었다.
 NEWS_LIMIT = 100
 NEWS_BUCKETS = 4  # 창을 4등분해 시간대별로 고르게 뽑는다
-# 매크로 등급에 떼어두는 자리. 등급 순서대로만 채우면 btc 가 NEWS_LIMIT 을 그대로
-# 다 먹어(2026-08-24: 36h btc 등급 108건) 매크로가 한 건도 못 올라온다 — 카드가
-# 매크로를 쓸 수 있으려면 후보에 보이기부터 해야 한다.
-MACRO_RESERVE = 12
+# 산업 등급에 떼어두는 자리. 등급 순서대로만 채우면 ai 가 NEWS_LIMIT 을 그대로 다
+# 먹어(2026-08-26 드라이런: 36h ai 등급 251건) 산업이 한 건도 못 올라온다 — 카드가
+# 반도체·전력 각도를 쓸 수 있으려면 후보에 보이기부터 해야 한다.
+INDUSTRY_RESERVE = 12
 
-# 후보의 비트코인 관련도 등급. 앞에 올수록 먼저 후보 자리를 가져간다.
-# 카드는 비트코인 온리가 1순위이고, 물량이 모자라면 알트·크립토 일반 소재 대신
-# 매크로(달러·금리·연준·국채)로 채운다 — 2026-08-24 편집 방침.
-RELEVANCE_TIERS = ("btc", "macro", "other")
+# 후보의 AI 관련도 등급. 앞에 올수록 먼저 후보 자리를 가져간다.
+# 카드는 AI 온리가 1순위이고, 물량이 모자라면 크립토·일반 테크 소재 대신
+# 산업(반도체·전력·데이터센터·CAPEX)으로 채운다.
+RELEVANCE_TIERS = ("ai", "industry", "other")
 
 # 관련도 판정 키워드. title 은 가중치 3, summary+tags 는 1로 센다(_relevance_score).
 # ASCII 항목은 단어 경계로, 한글 항목은 부분 문자열로 맞춘다.
-BTC_TERMS = (
+#
+# 1순위. 모델·연구소·에이전트처럼 "AI 그 자체"인 소재다.
+AI_TERMS = (
+    "인공지능",
+    "ai",
+    "llm",
+    "생성형",
+    "genai",
+    "오픈ai",
+    "openai",
+    "챗gpt",
+    "chatgpt",
+    "gpt",
+    "앤트로픽",
+    "앤스로픽",
+    "anthropic",
+    "클로드",
+    "claude",
+    "제미나이",
+    "gemini",
+    "딥마인드",
+    "deepmind",
+    "라마",
+    "llama",
+    "미스트랄",
+    "mistral",
+    "딥시크",
+    "deepseek",
+    "퍼플렉시티",
+    "perplexity",
+    "코파일럿",
+    "copilot",
+    "허깅페이스",
+    "hugging face",
+    "에이전트",
+    "agentic",
+    "추론 모델",
+    "파인튜닝",
+    "fine-tuning",
+    "머신러닝",
+    "machine learning",
+    "딥러닝",
+    "deep learning",
+    "파운데이션 모델",
+    "foundation model",
+    "멀티모달",
+    "multimodal",
+    "agi",
+    "초지능",
+    "superintelligence",
+    "정렬",
+    "alignment",
+    "환각",
+    "hallucination",
+    "프롬프트",
+    "prompt",
+    "벡터 db",
+    "rag",
+    "트랜스포머",
+    "transformer",
+)
+# "agent"(영문 단독)와 "토큰"은 넣지 않는다 — 전자는 travel agent·free agent 를,
+# 후자는 코인 기사를 그대로 끌고 온다. 한글 "에이전트"만으로 충분하다.
+#
+# 배제 축. btc-daily-web 에서 알트코인이 하던 역할을 여기서는 크립토가 한다 —
+# my-news 의 asset=ai 응답 500건 중 128건이 토큰포스트발이고(2026-08-26 실측)
+# 이 축이 없으면 후보 상단이 코인 시황으로 덮인다. 실제로 넣고 돌린 결과
+# 후보 100건 중 크립토 기사는 0건이었다.
+CRYPTO_TERMS = (
     "비트코인",
     "btc",
     "bitcoin",
-    "사토시",
-    "satoshi",
-    "반감기",
-    "halving",
-    "해시레이트",
-    "hashrate",
-    "해시프라이스",
-    "hashprice",
-    "채굴",
-    "mining",
-    "miner",
-    "난이도",
-    "라이트닝",
-    "lightning",
-    "utxo",
-    "탭루트",
-    "taproot",
-    "세그윗",
-    "segwit",
-    "코인베이스 프리미엄",
-    "퓨엘 멀티플",
-    "puell",
-    "mvrv",
-    "단기 보유자",
-    "장기 보유자",
-    "제네시스 블록",
-)
-# "온체인"은 체인 중립 용어라 넣지 않는다 — 넣으면 이더리움 온체인 기사가 btc 로 샌다.
-ALT_TERMS = (
     "이더리움",
     "ethereum",
     "eth",
-    "이더 ",
     "xrp",
     "리플",
-    "ripple",
     "솔라나",
     "solana",
     "알트코인",
@@ -134,73 +172,110 @@ ALT_TERMS = (
     "usdt",
     "usdc",
     "테더",
-    "tether",
-    "서클",
-    "지캐시",
-    "zcash",
-    "스택스",
-    "stacks",
-    "체인링크",
-    "chainlink",
-    "도지",
-    "doge",
+    "암호화폐",
+    "가상자산",
+    "크립토",
+    "crypto",
     "밈코인",
     "memecoin",
     "nft",
     "디파이",
     "defi",
-    "이캐시",
-    "부테린",
-    "buterin",
-    "하이퍼리퀴드",
-    "hyperliquid",
-    "토큰화",
-    "layer 1",
-    "레이어1",
+    "채굴",
+    "mining",
+    "해시레이트",
+    "온체인",
+    "김치 프리미엄",
+    "거래소 상장",
 )
-# "달러"는 단독으로 쓰지 않는다 — 코인 시세 헤드라인이 전부 "N달러"라 매크로가 오염된다.
-MACRO_TERMS = (
-    "달러인덱스",
-    "dxy",
-    "달러 약세",
-    "달러 강세",
-    "금리",
-    "국채",
-    "treasury",
-    "t-bill",
-    "채권",
-    "연준",
-    "fed",
-    "fomc",
-    "파월",
-    "잭슨홀",
-    "jackson hole",
-    "인플레이션",
-    "inflation",
-    "cpi",
-    "pce",
-    "물가",
-    "고용지표",
-    "실업률",
-    "금값",
-    "골드",
-    "gold",
-    "나스닥",
-    "nasdaq",
-    "s&p",
-    "증시",
-    "바이백",
-    "buyback",
-    "양적완화",
-    "수익률 곡선",
-    "yield curve",
-    "환율",
-    "엔화",
-    "관세",
-    "tariff",
+# 2순위. 반도체·전력·자본지출 — AI 를 굴리는 데 드는 물리적 비용 쪽이다.
+# **넓은 단어를 넣지 않는 게 이 튜플의 규칙이다.** 2026-08-26 드라이런에서
+# 관세·규제·IPO·펀딩·밸류에이션을 넣었더니 2순위 12칸 중 9칸이 증시 시황
+# (변동성지수·코스피 급등락·롱 포지션 쏠림)으로 찼고, 미국 정치자금 기사까지
+# 밀려 올라왔다. 그래서 하드웨어·전력·설비로 좁힌다.
+INDUSTRY_TERMS = (
+    "엔비디아",
+    "nvidia",
+    "gpu",
+    "tpu",
+    "npu",
+    "asic",
+    "반도체",
+    "hbm",
+    "tsmc",
+    "sk하이닉스",
+    "마이크론",
+    "micron",
+    "파운드리",
+    "foundry",
+    "웨이퍼",
+    "d램",
+    "dram",
+    "낸드",
+    "nand",
+    "브로드컴",
+    "broadcom",
+    "데이터센터",
+    "data center",
+    "datacenter",
+    "하이퍼스케일러",
+    "hyperscaler",
+    "전력망",
+    "전력 수요",
+    "전력 확보",
+    "기가와트",
+    "gigawatt",
+    "원전",
+    "smr",
+    "액침냉각",
+    "capex",
+    "자본지출",
+    "설비투자",
+    "수출 통제",
+    "export control",
+    "eu ai act",
+    "ai 기본법",
+    "ai 규제",
 )
-# 영상 후보 수. 5 는 실측상 너무 좁았다 — 2026-08-24 에 48h 안에서 요약까지
-# 끝난 비트코인 영상이 21건이었는데 상위 5건만 후보가 됐다.
+# 매체 간 사건 클러스터링. 2026-08-26 드라이런에서 오픈AI 할라페뇨 칩 발표 한 건이
+# 후보 100칸 중 8칸을 먹었다 — my-news 의 `is_duplicate` 는 매체 **내부** 중복만
+# 잡고 매체 간 중복은 그대로 통과시킨다. btc-daily-web 은 매체가 11곳이라 없어도
+# 굴러갔지만 이쪽은 54곳이라(googlenews 경유) 없으면 카드 절반이 같은 사건이 된다.
+#
+# 임계값은 그날 후보 100건을 손으로 훑어 정했다. 0.30 은 "애플 AI, 구글·엔비디아
+# 인프라로 방향 틀었다"를 스페이스X 기가와트 확장 건과 묶었고(오탐), 0.40 은
+# 할라페뇨 한국어 6건 중 4건만 묶었다. 0.32 에서 오탐 0 · 군 9개가 나왔다.
+EVENT_SIM_THRESHOLD = 0.32
+# 군의 **머리**(가장 앞선 기사)와도 최소 이만큼은 겹쳐야 합류시킨다. 단일 연결만
+# 쓰면 A-B 가 닮고 B-C 가 닮았다는 이유로 A 와 C 가 한 군이 된다(사슬). 실측:
+# 머리 관문 없이 돌렸더니 "인도 AI 데이터센터 80억달러 투자"가 "머스크 AI 위성
+# 발사"와 "스페이스X 베라 CPU"까지 끌어와 10건짜리 군이 됐다. 반대로 머리하고만
+# 비교(완전 연결에 가깝게)하면 할라페뇨 7건이 5+3 으로 쪼개졌다. 두 조건을 같이
+# 걸어 0.20 에서 사슬이 끊기고 같은 사건은 붙는다.
+EVENT_HEAD_THRESHOLD = 0.20
+# 비율만 보면 짧은 제목이 위험하다 — 토큰이 둘뿐인 "Agent Lightning v1.0" 은
+# "agent" 하나만 겹쳐도 비율 0.5 가 나온다. 겹친 **개수** 하한을 같이 건다.
+EVENT_MIN_SHARED = 3
+# 서명에서 뺄 영문 기능어. 한국어는 형태소 분석 없이 문자 바이그램으로 처리하므로
+# (조사가 붙어도 바이그램 상당수가 겹친다) 불용어 목록이 따로 필요 없다.
+EVENT_EN_STOPWORDS = frozenset(
+    {
+        "the", "and", "for", "with", "how", "its", "new", "from", "that", "this",
+        "are", "was", "has", "have", "after", "into", "out", "not", "but", "you",
+        "your", "who", "why", "all", "can", "may", "will", "more", "than", "about",
+        "over", "under", "said", "says", "amid", "top", "now", "one", "two",
+    }
+)
+_EVENT_BRACKET = re.compile(r"\[[^\]]*\]")
+_EVENT_TAIL = re.compile(r"[-–—]\s*[가-힣A-Za-z ]{2,12}$")
+_EVENT_HANGUL = re.compile(r"[가-힣]+")
+_EVENT_LATIN = re.compile(r"[a-z]{3,}")
+_EVENT_NUMBER = re.compile(r"\d+(?:[.,]\d+)?[가-힣%a-z]*")
+
+# my-youtube 가 큐 항목에 붙이는 주제 라벨. 이 프로젝트는 이 값 하나만 본다
+# (2026-08-26 기준 큐 2,290건 중 AI 1,103 / 비트코인 1,059 / 기타 117).
+VIDEO_TOPIC = "AI"
+# 영상 후보 수.
 VIDEO_LIMIT = 15
 # 영상 창은 게시 시각 기준 48h. 24h 로 좁히면 my-youtube 가 요약을 늦게 끝낸 영상이
 # 통째로 빠진다 — 게시 25h 뒤에 요약이 붙는 경우가 흔하다.
@@ -358,26 +433,133 @@ def _relevance_score(news: dict[str, Any], terms: tuple[str, ...]) -> int:
 
 
 def classify_relevance(news: dict[str, Any]) -> str:
-    """기사를 RELEVANCE_TIERS 중 하나로 분류한다 — "btc" / "macro" / "other".
+    """기사를 RELEVANCE_TIERS 중 하나로 분류한다 — "ai" / "industry" / "other".
 
-    비트코인 점수가 알트 점수 이상이면 btc, 아니면 매크로 점수가 알트 이상일 때
-    macro, 나머지는 other. 동점을 btc·macro 쪽에 주는 건 의도한 것이다 — 이 등급은
-    후보를 자르는 게이트가 아니라 **후보 자리를 누가 먼저 가져가느냐**를 정하는
-    우선순위라서, 카드 10장을 고르는 사람이 한 번 더 거른다. 애매한 건을 빼서
-    아예 안 보이게 만드는 쪽이 훨씬 비싸다(2026-08-24: 그날 트렌딩 1위 기사가
-    후보에 없었다).
+    AI 점수가 크립토 점수 이상이면 ai, 아니면 산업 점수가 크립토 이상일 때
+    industry, 나머지는 other. 동점을 ai·industry 쪽에 주는 건 의도한 것이다 —
+    이 등급은 후보를 자르는 게이트가 아니라 **후보 자리를 누가 먼저 가져가느냐**를
+    정하는 우선순위라서, 카드 10장을 고르는 사람이 한 번 더 거른다.
 
-    2026-08-24 코퍼스 108건 실측: btc 71 / macro 3 / other 34 로 갈렸고, other 에는
-    스택스·잭엑스비티·XRP 시황·이더리움·스테이블코인처럼 그날 카드에서 빼고 싶었던
-    소재가 모여 있었다.
+    2026-08-26 드라이런 285건 실측: ai 251 / industry 23 / other 11. other 가 4%
+    밖에 안 되는 건 asset=ai 피드가 이미 한 번 걸러져 들어오기 때문이다 — 이쪽
+    파이프라인에서 후보 품질을 실제로 좌우하는 건 등급이 아니라 cluster_events 다.
     """
-    btc = _relevance_score(news, BTC_TERMS)
-    alt = _relevance_score(news, ALT_TERMS)
-    if btc and btc >= alt:
-        return "btc"
-    if _relevance_score(news, MACRO_TERMS) >= max(alt, 1):
-        return "macro"
+    ai = _relevance_score(news, AI_TERMS)
+    crypto = _relevance_score(news, CRYPTO_TERMS)
+    if ai and ai >= crypto:
+        return "ai"
+    if _relevance_score(news, INDUSTRY_TERMS) >= max(crypto, 1):
+        return "industry"
     return "other"
+
+
+def _event_signature(news: dict[str, Any]) -> frozenset[str]:
+    """제목 하나를 "같은 사건인가"를 재는 서명으로 바꾼다.
+
+    한글은 문자 바이그램, 영문은 단어, 숫자는 단위째로 담는다. **영문을 바이그램으로
+    담으면 안 된다** — in·er·on 같은 흔한 글자쌍 때문에 관계없는 영문 기사들이
+    전부 한 덩어리가 된다(드라이런에서 영문 9건이 한 군으로 뭉쳤다).
+
+    말머리(`[미국 특징주]`)와 매체 꼬리(`- 조선비즈`)는 사건과 무관한데 여러 기사에
+    공통으로 붙어 유사도를 부풀리므로 먼저 떼어낸다.
+    """
+    text = str(news.get("title") or "").lower()
+    text = _EVENT_BRACKET.sub(" ", text)
+    text = _EVENT_TAIL.sub(" ", text)
+    hangul = "".join(_EVENT_HANGUL.findall(text))
+    sig = {hangul[i : i + 2] for i in range(len(hangul) - 1)}
+    sig.update(f"w:{w}" for w in _EVENT_LATIN.findall(text) if w not in EVENT_EN_STOPWORDS)
+    sig.update(f"n:{w}" for w in _EVENT_NUMBER.findall(text))
+    return frozenset(sig)
+
+
+def _overlap(a: frozenset[str], b: frozenset[str]) -> float:
+    """겹침 계수 — 교집합을 **작은 쪽** 크기로 나눈다."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def _same_event(a: frozenset[str], b: frozenset[str]) -> bool:
+    """겹침 계수(작은 쪽 기준)와 겹친 개수를 둘 다 넘겨야 같은 사건으로 본다.
+
+    자카드가 아니라 겹침 계수를 쓰는 건 제목 길이가 매체마다 크게 다르기 때문이다 —
+    통신사 한 줄 제목과 종합지 두 줄 제목이 같은 사건이어도 합집합이 커서 자카드가
+    낮게 나온다.
+    """
+    return len(a & b) >= EVENT_MIN_SHARED and _overlap(a, b) >= EVENT_SIM_THRESHOLD
+
+
+def cluster_events(items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """같은 사건을 다룬 기사끼리 묶는다. 입력 순서를 보존한다(앞선 것이 각 군의 머리).
+
+    합류 조건이 둘이다 — 군의 **아무 기사와** _same_event 이고, 동시에 군의 **머리와**
+    EVENT_HEAD_THRESHOLD 이상 겹쳐야 한다. 앞의 조건만 쓰면 사슬이 생기고, 뒤의
+    조건만 쓰면 같은 사건이 쪼개진다(각 상수 주석에 실측 사례를 적어 뒀다).
+
+    남는 한계 둘은 알고도 둔 것이다.
+    1. 한국어 기사와 영문 기사가 같은 사건이어도 잘 안 묶인다 — 할라페뇨 한국어
+       7건은 한 군이 됐지만 GeekNews·TechCrunch 영문판은 따로 남았다. 표기 사전
+       없이는 못 넘는 선이고, 잘못 묶는 쪽이 못 묶는 쪽보다 비싸다.
+    2. 주제가 인접한 다른 사건은 가끔 붙는다 — 2026-08-26 코퍼스 285건에서 군 27개
+       중 하나가 그랬다("인도 데이터센터 80억달러 주문"에 "머스크 AI 위성 발사"가
+       붙었다). 둘 다 "AI 데이터센터 + 엔비디아칩"이라 서명이 실제로 겹친다.
+       대표에 cluster_titles 를 붙여 두는 이유가 이거다 — 카드를 고르는 쪽이 눈으로
+       가른다.
+    """
+    signatures = [_event_signature(n) for n in items]
+    groups: list[list[int]] = []
+    for i in range(len(items)):
+        for group in groups:
+            if _overlap(signatures[i], signatures[group[0]]) < EVENT_HEAD_THRESHOLD:
+                continue
+            if any(_same_event(signatures[i], signatures[j]) for j in group):
+                group.append(i)
+                break
+        else:
+            groups.append([i])
+    return [[items[i] for i in group] for group in groups]
+
+
+def collapse_events(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """사건 하나당 기사 하나만 남긴다. 나머지는 대표 기사에 메타로 접어 넣는다.
+
+    대표는 **군에서 가장 앞선(=등급·화제성이 높은) 기사 중 이미지가 있는 것**이다.
+    이미지가 있는 쪽을 올리는 게 이 함수의 두 번째 일이다 — 같은 사건이니 어느
+    기사를 써도 내용은 같은데, 드라이런에서 후보 100건 중 이미지가 39건뿐이라
+    (googlenews 경유 기사가 image_url 없이 들어온다) 카드 10장을 못 채웠다.
+    **다른 매체의 이미지를 가져다 붙이지 않고 대표 자체를 바꾸는 것**이 중요하다.
+    카드는 이미지와 원문 링크를 같이 싣기 때문에, 이미지만 남의 것을 쓰면 출처가
+    어긋난다. 군 전체에 이미지가 없으면 맨 앞 기사를 그대로 대표로 둔다.
+
+    대표에 붙는 키:
+      cluster_size     — 이 사건을 다룬 후보 기사 수(= 매체 수의 하한, 화제성 신호)
+      also_covered_by  — 대표를 뺀 나머지 매체 이름
+      cluster_titles   — 나머지 기사의 제목/URL. 같은 사건의 다른 각도를 보여준다.
+
+    items 와 그 안의 dict 를 변형하지 않는다.
+    """
+    collapsed: list[dict[str, Any]] = []
+    for group in cluster_events(items):
+        lead = next((n for n in group if n.get("image_url")), group[0])
+        others = [n for n in group if n is not lead]
+        collapsed.append(
+            {
+                **lead,
+                "cluster_size": len(group),
+                "also_covered_by": list(
+                    dict.fromkeys(
+                        name
+                        for n in others
+                        if (name := n.get("source_ref") or n.get("source"))
+                    )
+                ),
+                "cluster_titles": [
+                    {"title": n.get("title"), "url": n.get("url")} for n in others
+                ],
+            }
+        )
+    return collapsed
 
 
 def _round_robin_by_bucket(
@@ -404,6 +586,9 @@ def _round_robin_by_bucket(
         bucket.sort(
             key=lambda n: (
                 n.get("url") not in priority,
+                # 같은 사건을 다룬 매체가 많을수록 앞. collapse_events 가 붙여 둔
+                # 값이고, 안 붙어 있으면(단독 호출 등) 전부 1이라 예전과 같다.
+                -n.get("cluster_size", 1),
                 -_parse_dt(n["crawled_at"]).timestamp(),
             )
         )
@@ -420,17 +605,16 @@ def _round_robin_by_bucket(
     return picked
 
 
-def macro_topups(
+def industry_topups(
     items: list[dict[str, Any]],
     now: datetime.datetime,
     exclude_urls: Collection[str] = (),
 ) -> list[dict[str, Any]]:
-    """asset 필터 없는 피드에서 **macro 등급만** 골라낸다 — 매크로 보강 풀.
+    """asset 필터 없는 피드에서 **industry 등급만** 골라낸다 — 산업 보강 풀.
 
-    btc 등급은 일부러 버린다. 이 피드는 AI·일반 뉴스가 대부분이고 그중 일부에
-    내용과 무관한 `tags: ['bitcoin']` 이 붙어 있어(2026-08-24 실측: KBO 야구 기사
-    3건이 그렇게 btc 로 분류됐다) 그대로 받으면 후보 상단이 오염된다. 비트코인
-    기사는 my-news 가 이미 asset=btc 로 걸러 주므로 여기서 또 주울 이유도 없다.
+    ai 등급은 일부러 버린다. 이 피드는 비트코인·일반 뉴스가 대부분이라 그대로
+    받으면 후보 상단이 코인 시황으로 오염된다. AI 기사는 my-news 가 이미
+    asset=ai 로 걸러 주므로 여기서 또 주울 이유도 없다.
 
     exclude_urls 는 기본 피드에서 이미 받은 url 이다 — 두 피드가 겹치는 만큼
     중복으로 들어오는 걸 막는다.
@@ -445,7 +629,7 @@ def macro_topups(
         crawled = news.get("crawled_at")
         if not crawled or _parse_dt(crawled) < cutoff:
             continue
-        if classify_relevance(news) != "macro":
+        if classify_relevance(news) != "industry":
             continue
         seen.add(url)
         picked.append(news)
@@ -463,13 +647,11 @@ def filter_news(
 
     두 축이 겹쳐 있다.
 
-    **관련도(바깥 축).** RELEVANCE_TIERS 순서대로 btc 를 먼저 채우고, 남으면
-    macro, 그래도 남으면 other 로 채운다. 카드가 비트코인 온리를 1순위로 두고
-    물량이 모자랄 때 알트 대신 매크로를 쓰기 때문이다. 다만 btc 만으로 상한이
-    차버리면 매크로가 후보에 아예 안 보이므로, macro 후보가 있는 만큼
-    MACRO_RESERVE 자리까지는 btc 몫에서 떼어 남겨둔다. 2026-08-24 진단: 코퍼스
-    108건 중 20건만 후보가 됐는데 관련도 정렬이 없어, 그날 트렌딩 1위였던 CFTC
-    비트코인 무기한선물 승인은 빠지고 이더리움 시세·지캐시 기사는 들어왔다.
+    **관련도(바깥 축).** RELEVANCE_TIERS 순서대로 ai 를 먼저 채우고, 남으면
+    industry, 그래도 남으면 other 로 채운다. 카드가 AI 온리를 1순위로 두고
+    물량이 모자랄 때 크립토 대신 산업(반도체·전력)을 쓰기 때문이다. 다만 ai 만으로
+    상한이 차버리면 산업이 후보에 아예 안 보이므로, industry 후보가 있는 만큼
+    INDUSTRY_RESERVE 자리까지는 ai 몫에서 떼어 남겨둔다.
 
     **시간대(안쪽 축).** 각 등급 안에서는 창을 NEWS_BUCKETS 개 구간으로 나눠
     구간별 라운드로빈으로 뽑는다. 크론이 06:00 KST 에 도는 탓에 그 직전 몇 시간
@@ -479,10 +661,13 @@ def filter_news(
     **화제성(구간 안 정렬).** priority_urls 는 보통 rank_topics 상위 토픽에 걸린
     기사들의 url 이다. 구간 안에서 이들을 최신순보다 앞에 둔다 — 등급이 같아도
     여러 매체가 동시에 다룬 사건이 먼저 후보 자리를 가져가야 지엽적인 단발 기사에
-    밀리지 않는다. 2026-08-24 에는 btc 등급만 71건이라 40 컷에서 그날 트렌딩 1위
-    (CFTC 비트코인 무기한선물 승인)가 잘려나갔다. 안 넘기면 예전처럼 최신순이다.
+    밀리지 않는다. 안 넘기면 예전처럼 최신순이다.
 
-    돌려주는 각 항목에는 `relevance` 키가 붙는다(카드 10장을 고를 때 쓴다).
+    **사건(접기).** 창을 통과한 직후 collapse_events 로 같은 사건을 한 건으로
+    접는다. 상한을 세기 전에 접어야 "서로 다른 사건 100건"이 된다.
+
+    돌려주는 각 항목에는 `relevance` 와 `cluster_size`/`also_covered_by`/
+    `cluster_titles` 가 붙는다(카드 10장을 고를 때 쓴다).
 
     exclude_image_hashes(recent_image_hashes)와 hash_image(url -> average hash,
     보통 get_image_hash 를 클라이언트/캐시에 바인딩한 클로저)가 둘 다 주어지면,
@@ -501,28 +686,32 @@ def filter_news(
         for n in items
         if not n.get("is_duplicate") and _parse_dt(n["crawled_at"]) >= cutoff
     ]
+    # 상한(NEWS_LIMIT)을 세기 **전에** 접는다 — 접고 세야 "서로 다른 사건 100건"이
+    # 된다. 접기 전에 자르면 상위 칸을 같은 사건이 나눠 먹은 채로 잘린다.
+    fresh = collapse_events(fresh)
 
     by_tier = {tier: [n for n in fresh if n["relevance"] == tier] for tier in RELEVANCE_TIERS}
     # btc 가 상한을 다 먹지 않도록, 실제로 있는 만큼만 매크로 자리를 떼어둔다.
-    reserved = min(MACRO_RESERVE, len(by_tier["macro"]))
+    reserved = min(INDUSTRY_RESERVE, len(by_tier["industry"]))
 
     picked: list[dict[str, Any]] = []
     for tier in RELEVANCE_TIERS:
         room = NEWS_LIMIT - len(picked)
-        if tier == "btc":
+        if tier == "ai":
             room -= reserved
         if room <= 0:
             continue
         picked.extend(_round_robin_by_bucket(by_tier[tier], now, room, priority_urls))
 
     # draft 를 사람이 읽을 땐 등급 → 화제성 → 최신순이 자연스럽다. 위에서부터 읽으면
-    # 비트코인 온리에 여러 매체가 동시에 다룬 사건이 먼저 나온다 — 카드 10장을 고를 때
+    # AI 온리에 여러 매체가 동시에 다룬 사건이 먼저 나온다 — 카드 10장을 고를 때
     # 실제로 훑는 순서가 그거다.
     priority = set(priority_urls)
     picked.sort(
         key=lambda n: (
             RELEVANCE_TIERS.index(n["relevance"]),
             n.get("url") not in priority,
+            -n.get("cluster_size", 1),
             -_parse_dt(n["crawled_at"]).timestamp(),
         )
     )
@@ -592,7 +781,7 @@ def filter_videos(
     now: datetime.datetime,
     exclude_ids: Collection[str] = (),
 ) -> list[dict[str, Any]]:
-    """Keep 비트코인-topic, summarized videos published within the window, by view_count desc.
+    """Keep VIDEO_TOPIC videos, summarized, published within the window, by view_count desc.
 
     창을 published_at 으로 잡는 게 핵심이다. 큐 등록 시각(added_at)으로 잡으면
     my-youtube 가 과거 영상을 한꺼번에 백필한 날 몇 주 지난 영상이 "최근 24시간"으로
@@ -612,7 +801,7 @@ def filter_videos(
     fresh = [
         v
         for v in items
-        if v.get("topic") == "비트코인"
+        if v.get("topic") == VIDEO_TOPIC
         and v.get("summary")
         and v.get("published_at")
         and _parse_dt(v["published_at"]) >= cutoff
@@ -648,7 +837,7 @@ def trending_pool_videos(
     return [
         v
         for v in items
-        if v.get("topic") == "비트코인"
+        if v.get("topic") == VIDEO_TOPIC
         and v.get("published_at")
         and _parse_dt(v["published_at"]) >= cutoff
     ]
@@ -684,15 +873,15 @@ def warn_video_drought(items: list[dict[str, Any]]) -> None:
     소스 스키마가 바뀌어 summary 가 통째로 빠지면 filter_videos 가 전부 걸러내는데,
     그대로 두면 '오늘은 영상이 없었나 보다'로 읽혀 넘어간다(2026-08-05 실제 사례).
     """
-    btc = [v for v in items if v.get("topic") == "비트코인"]
-    if btc and not any(v.get("summary") for v in btc):
+    topical = [v for v in items if v.get("topic") == VIDEO_TOPIC]
+    if topical and not any(v.get("summary") for v in topical):
         print(
-            f"WARNING: 비트코인 영상 {len(btc)}건이 있는데 summary 가 하나도 없다 — "
+            f"WARNING: {VIDEO_TOPIC} 영상 {len(topical)}건이 있는데 summary 가 하나도 없다 — "
             "my-youtube 응답에서 요약이 빠졌는지 확인하라(--youtube-url 에 full=1 필요).",
             file=sys.stderr,
         )
     else:
-        print("WARNING: 창 안에 비트코인 영상 후보가 없다 — 뉴스만으로 구성된다.", file=sys.stderr)
+        print(f"WARNING: 창 안에 {VIDEO_TOPIC} 영상 후보가 없다 — 뉴스만으로 구성된다.", file=sys.stderr)
 
 
 def apply_date_to_cover(cover_fixed: dict[str, Any], date: datetime.date) -> dict[str, Any]:
@@ -702,7 +891,7 @@ def apply_date_to_cover(cover_fixed: dict[str, Any], date: datetime.date) -> dic
     막는다.
     """
     cover = dict(cover_fixed)
-    cover["mark"] = [f"{date.month}월 {date.day}일", "비트코인 카드뉴스"]
+    cover["mark"] = [f"{date.month}월 {date.day}일", "AI 카드뉴스"]
     cover["meta"] = [*cover_fixed["meta"][:2], f"{date:%Y.%m.%d}"]
     return cover
 
@@ -723,8 +912,8 @@ def build_skeleton(
     closing["sources"] = sources
     return {
         "meta": {
-            "title": f"비트코인 하이라이트 · {date.month}.{date.day}",
-            "slug": f"btc-daily-{date:%m%d}",
+            "title": f"AI 하이라이트 · {date.month}.{date.day}",
+            "slug": f"ai-daily-{date:%m%d}",
             "date": date.isoformat(),
         },
         "theme": theme,
@@ -906,7 +1095,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", help="기본값: <repo>/drafts/draft-<date>.json")
     parser.add_argument("--news-url", default=DEFAULT_NEWS_URL)
     parser.add_argument("--trending-news-url", default=DEFAULT_TRENDING_NEWS_URL)
-    parser.add_argument("--macro-news-url", default=DEFAULT_MACRO_NEWS_URL)
+    parser.add_argument("--broad-news-url", default=DEFAULT_BROAD_NEWS_URL)
     parser.add_argument("--youtube-url", default=DEFAULT_YOUTUBE_URL)
     parser.add_argument(
         "--edition-api",
@@ -953,18 +1142,18 @@ def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> P
         hot_urls = trending_article_urls(trending_candidates)
         # 후보 이미지 해시도 같은 클라이언트·캐시로 계산한다. filter_news 는 URL 만
         # 넘기므로 클로저로 묶어 둔다.
-        # 매크로 보강. 실패해도 수집을 막지 않는다 — 있으면 좋은 것이지, 피드 하나
+        # 산업 보강. 실패해도 수집을 막지 않는다 — 있으면 좋은 것이지, 피드 하나
         # 때문에 06:00 배치가 죽으면 손해가 훨씬 크다.
         try:
-            macro_raw = fetch_json(client, args.macro_news_url, "my-news(macro)")
+            broad_raw = fetch_json(client, args.broad_news_url, "my-news(broad)")
         except (httpx.HTTPError, SystemExit) as exc:
-            print(f"경고: 매크로 보강 피드를 못 읽어 건너뛴다 ({exc!r})", file=sys.stderr)
-            macro_raw = []
-        macro_extra = macro_topups(
-            macro_raw, window_end_utc, {n.get("url") for n in news_raw if n.get("url")}
+            print(f"경고: 산업 보강 피드를 못 읽어 건너뛴다 ({exc!r})", file=sys.stderr)
+            broad_raw = []
+        industry_extra = industry_topups(
+            broad_raw, window_end_utc, {n.get("url") for n in news_raw if n.get("url")}
         )
         news = filter_news(
-            news_raw + macro_extra,
+            news_raw + industry_extra,
             window_end_utc,
             used_image_hashes,
             lambda url: get_image_hash(client, url, image_hash_cache),
@@ -993,7 +1182,7 @@ def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> P
     if is_exhausted(quote_pool, used_quote_ids):
         print(
             "경고: 표지 인용구 풀을 한 바퀴 다 돌았다 — 가장 오래전에 쓴 것부터 "
-            f"재사용한다 (풀 {len(quote_pool)}개). austrian_quotes.json 을 늘려라.",
+            f"재사용한다 (풀 {len(quote_pool)}개). ai_quotes.json 을 늘려라.",
             file=sys.stderr,
         )
     quote = pick_quote(quote_pool, used_quote_ids, date)
@@ -1031,6 +1220,13 @@ def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> P
         f"news candidates: {len(news)} — "
         + " / ".join(f"{tier} {count}" for tier, count in tier_counts.items())
     )
+    folded = sum(n.get("cluster_size", 1) - 1 for n in news)
+    with_image = sum(1 for n in news if n.get("image_url"))
+    print(
+        f"event folding: {folded}건을 접어 사건 {len(news)}개 — "
+        f"가장 큰 사건 {max((n.get('cluster_size', 1) for n in news), default=0)}매체"
+    )
+    print(f"image coverage: {with_image}/{len(news)} ({with_image * 100 // max(len(news), 1)}%)")
     print(
         f"video candidates: {len(videos)} — 최근 {RECENT_VIDEO_DAYS}일 발행분 "
         f"{len(used_video_ids)}건 제외"

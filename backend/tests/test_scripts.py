@@ -358,7 +358,7 @@ def test_trending_article_urls_dedupes_and_stops_at_the_priority_cutoff() -> Non
     ]
 
 
-# ---- collect_daily.macro_topups / 매크로 예약 자리 ----
+# ---- collect_daily.industry_topups / 매크로 예약 자리 ----
 
 
 def test_macro_topups_keeps_only_macro_tier() -> None:
@@ -369,7 +369,7 @@ def test_macro_topups_keeps_only_macro_tier() -> None:
         make_news(url="o", title="오픈AI 규제 입장 선회"),
     ]
 
-    result = collect_daily.macro_topups(items, NOW)
+    result = collect_daily.industry_topups(items, NOW)
 
     assert [n["url"] for n in result] == ["m"]
 
@@ -377,14 +377,14 @@ def test_macro_topups_keeps_only_macro_tier() -> None:
 def test_macro_topups_skips_urls_already_in_the_base_feed() -> None:
     items = [make_news(url="dup", title="연준 금리 동결 시사")]
 
-    assert collect_daily.macro_topups(items, NOW, {"dup"}) == []
+    assert collect_daily.industry_topups(items, NOW, {"dup"}) == []
 
 
 def test_macro_topups_respects_the_news_window() -> None:
     stale = NOW - datetime.timedelta(hours=collect_daily.NEWS_WINDOW_HOURS + 1)
     items = [make_news(url="old", title="연준 금리 동결 시사", crawled_at=stale.isoformat())]
 
-    assert collect_daily.macro_topups(items, NOW) == []
+    assert collect_daily.industry_topups(items, NOW) == []
 
 
 def test_filter_news_reserves_slots_for_macro_when_btc_would_fill_the_limit() -> None:
@@ -403,14 +403,14 @@ def test_filter_news_reserves_slots_for_macro_when_btc_would_fill_the_limit() ->
             title="연준 금리 동결 시사",
             crawled_at=(NOW - datetime.timedelta(minutes=i + 1)).isoformat(),
         )
-        for i in range(collect_daily.MACRO_RESERVE + 5)
+        for i in range(collect_daily.INDUSTRY_RESERVE + 5)
     ]
 
     result = collect_daily.filter_news(btc + macro, NOW)
 
     assert len(result) == collect_daily.NEWS_LIMIT
     kept = sum(1 for n in result if n["relevance"] == "macro")
-    assert kept == collect_daily.MACRO_RESERVE
+    assert kept == collect_daily.INDUSTRY_RESERVE
 
 
 def test_filter_news_gives_the_reserve_back_when_macro_is_short() -> None:
