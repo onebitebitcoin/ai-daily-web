@@ -1,7 +1,9 @@
 """Validate a finished edition JSON locally, then POST it to /api/editions.
 
 Local validation reuses the same pydantic schema the API enforces, so a bad
-field fails here with a clear message instead of round-tripping a 422.
+field fails here with a clear message instead of round-tripping a 422. 그 뒤
+verify_edition 이 카드마다 원문 링크와 이미지를 실제로 두드려 본다 — 죽은 링크,
+매체 홈페이지, 구글 리디렉션, 중복 이미지는 여기서 막힌다.
 
 Usage: python scripts/push_edition.py drafts/edition-2026-07-30.json
        python scripts/push_edition.py drafts/edition-2026-07-30.json --date 2026-07-30
@@ -27,6 +29,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.schemas import EditionContent  # noqa: E402  (sys.path 조정 후여야 함)
 from app.wording import find_problems  # noqa: E402
 from scripts.collect_daily import apply_date_to_cover  # noqa: E402
+from scripts.verify_edition import check_edition, print_report  # noqa: E402
 
 ENV_FILE = BACKEND_ROOT / ".env"
 # 이 프로젝트의 로컬 백엔드다. 8002 는 btc-daily-web 이라 그대로 두면 AI 에디션이
@@ -92,6 +95,23 @@ def check_wording(content: EditionContent) -> None:
         )
 
 
+def check_links_and_images(client: httpx.Client, body: dict[str, Any]) -> None:
+    """링크·이미지 검증(verify_edition). FAIL 이 하나라도 있으면 POST 하지 않는다.
+
+    스키마·커버·문구 게이트와 달리 이건 바깥 네트워크를 두드리므로 `--skip-link-check`
+    를 둔다 — 네트워크가 없는 자리에서 발행해야 할 때뿐이고, 켜 두는 게 기본이다.
+    확인이 안 되는 것(매체가 봇을 403 으로 막는 등)은 WARN 이라 발행을 막지 않는다.
+    """
+    print("링크·이미지 검증:")
+    report = check_edition(body, client)
+    print_report(report)
+    if not report.ok:
+        raise SystemExit(
+            f"링크·이미지 검증 실패 — 발행하지 않음 ({len(report.fails)}건). "
+            "위 FAIL 을 고치고 다시 돌려라."
+        )
+
+
 def push(client: httpx.Client, api: str, api_key: str, body: dict[str, Any]) -> dict[str, Any]:
     response = client.post(
         f"{api}/api/editions",
@@ -108,6 +128,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("edition_path", type=Path)
     parser.add_argument("--api", default=DEFAULT_API)
     parser.add_argument("--date", help="검증용: 파일의 meta.date와 일치해야 함")
+    parser.add_argument(
+        "--skip-link-check",
+        action="store_true",
+        help="링크·이미지 검증을 건너뛴다. 네트워크가 없을 때만 쓴다",
+    )
     return parser.parse_args(argv)
 
 
@@ -127,8 +152,12 @@ def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> d
 
     owns_client = client is None
     if owns_client:
-        client = httpx.Client(timeout=10.0)
+        client = httpx.Client(timeout=15.0)
     try:
+        if args.skip_link_check:
+            print("경고: --skip-link-check — 링크·이미지 검증을 건너뛴다", file=sys.stderr)
+        else:
+            check_links_and_images(client, body)
         result = push(client, args.api, api_key, body)
     finally:
         if owns_client:

@@ -381,6 +381,18 @@ cd backend && source .venv/bin/activate && \
 python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localhost:8003
 ```
 
+`push_edition.py`는 POST 전에 게이트 넷을 통과시킨다 — 스키마, 표지-날짜 일치,
+문구(2.1·2.2), 그리고 **링크·이미지 검증**(`verify_edition.py`). 마지막 것이
+카드마다 원문과 이미지를 실제로 두드린다. FAIL 이 하나라도 있으면 발행하지 않는다.
+
+| FAIL — 발행이 막힌다 | WARN — 사람이 봐야 한다 |
+|---|---|
+| 링크가 죽었다(4xx/5xx) · 매체 홈페이지다 · 구글 리디렉션이다 | 매체가 봇을 403 으로 막아 확인 불가 |
+| 이미지가 죽었다 · 이미지가 아닌 걸 준다 | 이미지가 없다(기본 아트로 나간다) |
+| 두 카드가 같은 이미지를 쓴다(주소가 달라도 해시로 잡는다) | 카드 제목과 원문 제목에 겹치는 낱말이 없다 |
+
+`--skip-link-check`는 네트워크가 없는 자리에서만 쓴다. 켜 두는 게 기본이다.
+
 `--api` 기본값은 `push_edition.py`·`recent_editions.py`·`collect_daily.py`
 셋 다 `http://localhost:8003`이라 생략해도 이 프로젝트 백엔드로 간다. 포크 직후
 둘이 8002(btc-daily-web)를 가리켜 남의 DB로 발행할 뻔했고, 지금은 테스트가
@@ -404,11 +416,39 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localh
 
 ```bash
 curl -s "http://localhost:8003/api/editions/<date>" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['meta']); print(len(d['cards']), '장')"
-curl -s http://localhost:8003/api/editions
+python scripts/verify_edition.py --date <date>    # 발행된 것을 한 번 더 훑는다
 ```
 
-사용자에게 보고할 것: 발행된 날짜, 카드 10장의 제목 목록, 확인 URL
-(`http://localhost:5176/d/<date>` — 프론트가 8003을 프록시하는지 먼저 확인).
+`verify_edition.py`는 카드마다 **원문 제목을 찍어 준다.** 그 줄을 흘려보지 마라 —
+2026-08-26 발행분은 라벨이 "알파경제 원문"인데 실제 기사는 TechCrunch 것이었다.
+기계는 링크가 살아 있다는 것까지만 안다.
+
+#### 7.1. 기계가 못 보는 것 — 눈으로 확인할 셋
+
+**하나. 이미지 10장을 실제로 열어라.** URL 만 넣고 넘어가지 마라. `/api/img/<date>/<num>`
+이 아니라 원본 주소를 열어 그림을 본다. 2026-08-26 실측으로 이런 것들이 그대로 나갔다.
+
+- **재탕 표지.** 코인텔레그래프 매거진의 `og:image`는 다른 기사("AGI가 우리를 죽이지
+  않게 만들기")의 표지였다 — 로봇이 사람을 쫓는 만화가 허깅페이스 해킹 카드에 붙었다.
+- **브랜드 렌더 돌려쓰기.** 토큰포스트는 오픈AI 기사마다 같은 로고 3D 렌더를 건다.
+  카드 1번과 3번이 같은 그림이 됐고, 표지가 1번을 쓰므로 한 화면에 세 번 나왔다.
+  (이건 이제 `verify_edition.py`가 FAIL 로 막는다.)
+- **무관한 삽화.** 엔비디아 주가 카드에 봉투와 지폐를 든 손 그림이 붙었다.
+
+**바꾸는 방법은 후보 안에 있다.** `cluster_titles`의 다른 매체 기사, 또는 같은 사건을
+다룬 다른 후보의 `image_url`을 열어 본다 — 2026-08-26에는 같은 사건을 다룬
+디지털데일리 기사에 올트먼과 브로드컴 CEO가 웨이퍼를 든 사진이 있었다. 고르는
+순서는 `CONTENT_CONTRACT.md` 5.0절이다.
+
+**둘. 본문의 숫자·고유명사를 원문과 대조하라.** 2026-08-26 발행분 5번 카드에
+"앨라배마 주 법무장관이 오픈AI에 소환장을 보냈다"는 문장이 있었는데, 링크한 기사에도
+후보 100건 어디에도 없는 얘기였다. 후보에 없는 사실은 쓰지 마라. 이미 썼다면 지운다.
+
+**셋. 브라우저로 한 번 본다.** `http://localhost:5176/d/<date>` — 이미지 프록시는
+24시간 캐시라 방금 바꾼 그림이면 하드 리로드(Cmd+Shift+R)해야 보인다.
+
+사용자에게 보고할 것: 발행된 날짜, 카드 10장의 제목 목록, `verify_edition.py`의
+FAIL·WARN 수, 눈으로 확인한 내용, 확인 URL(`http://localhost:5176/d/<date>`).
 
 ---
 

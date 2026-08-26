@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 import pytest
 
-from scripts import collect_daily, generate_qa, push_edition, recent_editions
+from scripts import collect_daily, generate_qa, push_edition, recent_editions, verify_edition
 
 NOW = datetime.datetime(2026, 7, 31, 3, 0, tzinfo=datetime.UTC)
 
@@ -1406,7 +1406,8 @@ def test_push_edition_accepts_cover_matching_meta_date(
         return httpx.Response(200, content=request.content)
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = push_edition.main([str(edition_path)], client=client)
+        # 링크·이미지 검증은 바깥 네트워크를 두드린다 — 여기 관심사가 아니라 끈다.
+        result = push_edition.main([str(edition_path), "--skip-link-check"], client=client)
 
     assert result["cover"]["mark"] == ["7월 30일", "AI 카드뉴스"]
 
@@ -1436,9 +1437,279 @@ def test_push_edition_success_posts_validated_body(
         return httpx.Response(200, content=request.content)
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = push_edition.main([str(edition_path)], client=client)
+        result = push_edition.main([str(edition_path), "--skip-link-check"], client=client)
 
     assert result["meta"]["date"] == "2026-07-30"
+
+
+# ---- verify_edition (발행 직전 링크·이미지 검증) ----
+
+
+def patterned_png(seed: int) -> bytes:
+    """서로 다른 average hash 가 나오는 8x8 PNG. 단색은 전부 해시 0 이라 못 쓴다."""
+    import io
+
+    from PIL import Image
+
+    image = Image.new("L", (8, 8))
+    image.putdata([(seed * 37 + i * 11) % 256 for i in range(64)])
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def verify_card(
+    num: int,
+    *,
+    href: str = "https://news.example/article/1",
+    image: str | None = "https://img.example/1.png",
+    title: str = "오픈AI 추론칩 공개",
+    chips: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "num": num,
+        "title": title,
+        "chips": chips or [],
+        "link": {"label": "매체 원문", "href": href},
+        "media": {"image": image, "href": None, "cta": None} if image else None,
+    }
+
+
+def article_page(title: str = "오픈AI 추론칩 공개…성능 전격 공개") -> httpx.Response:
+    return httpx.Response(
+        200, text=f'<html><head><meta property="og:title" content="{title}" /></head></html>'
+    )
+
+
+def verify_client(routes: dict[str, httpx.Response]) -> httpx.Client:
+    """URL 접두사로 응답을 고르는 가짜 웹. 목록에 없으면 404 다."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        for prefix, response in routes.items():
+            if url.startswith(prefix):
+                return response
+        return httpx.Response(404)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def png_response(seed: int = 1) -> httpx.Response:
+    return httpx.Response(
+        200, content=patterned_png(seed), headers={"content-type": "image/png"}
+    )
+
+
+def test_verify_passes_a_healthy_edition() -> None:
+    content = {
+        "cards": [
+            verify_card(1),
+            verify_card(
+                2,
+                href="https://news.example/article/2",
+                image="https://other.example/2.png",
+            ),
+        ]
+    }
+    routes = {
+        "https://news.example/": article_page(),
+        "https://img.example/": png_response(1),
+        "https://other.example/": png_response(200),
+    }
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert report.fails == []
+
+
+def test_verify_flags_a_link_that_is_just_the_outlet_homepage() -> None:
+    """2026-08-26 실측: googlenews 후보의 리디렉션을 못 써서 카드 4장이 홈페이지로 나갔다."""
+    content = {"cards": [verify_card(1, href="https://www.donga.com/")]}
+
+    with verify_client({"https://img.example/": png_response()}) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("매체 홈페이지" in f for f in report.fails)
+
+
+def test_verify_flags_a_google_news_redirect_link() -> None:
+    href = collect_daily.GOOGLE_NEWS_ARTICLE + "CBMiTEST?oc=5"
+    content = {"cards": [verify_card(1, href=href)]}
+
+    with verify_client({"https://img.example/": png_response()}) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("구글 뉴스 리디렉션" in f for f in report.fails)
+
+
+def test_verify_flags_a_dead_link() -> None:
+    """2026-08-26 실측: 코인텔레그래프 주소가 404 인 채로 발행됐다."""
+    content = {"cards": [verify_card(1, href="https://cointelegraph.com/features/gone")]}
+
+    with verify_client({"https://img.example/": png_response()}) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("링크가 죽었다(404)" in f for f in report.fails)
+
+
+def test_verify_treats_a_blocked_link_as_a_warning_not_a_failure() -> None:
+    """매체가 봇을 막은 것뿐인데 발행을 못 하게 되면 손해가 더 크다."""
+    content = {"cards": [verify_card(1)]}
+    routes = {
+        "https://news.example/": httpx.Response(403),
+        "https://img.example/": png_response(),
+    }
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert report.fails == []
+    assert any("확인을 막았다(403)" in w for w in report.warns)
+
+
+def test_verify_flags_two_cards_sharing_the_same_image_url() -> None:
+    """표지가 1번 카드 이미지를 쓰므로 1번과 겹치면 한 화면에 세 번 나온다."""
+    content = {
+        "cards": [
+            verify_card(1, image="https://img.example/same.png"),
+            verify_card(2, href="https://news.example/article/2", image="https://img.example/same.png"),
+        ]
+    }
+    routes = {"https://news.example/": article_page(), "https://img.example/": png_response()}
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("같은 이미지를 쓴다" in f for f in report.fails)
+
+
+def test_verify_flags_the_same_image_served_under_two_urls() -> None:
+    """2026-08-26 실측: 토큰포스트가 같은 브랜드 렌더를 다른 파일명으로 두 기사에 걸었다."""
+    content = {
+        "cards": [
+            verify_card(1, image="https://img.example/a.png"),
+            verify_card(2, href="https://news.example/article/2", image="https://img.example/b.png"),
+        ]
+    }
+    routes = {"https://news.example/": article_page(), "https://img.example/": png_response(3)}
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("같은 이미지를 쓴다" in f for f in report.fails)
+
+
+def test_verify_does_not_flag_two_different_images() -> None:
+    content = {
+        "cards": [
+            verify_card(1, image="https://img.example/a.png"),
+            verify_card(2, href="https://news.example/article/2", image="https://other.example/b.png"),
+        ]
+    }
+    routes = {
+        "https://news.example/": article_page(),
+        "https://img.example/": png_response(1),
+        "https://other.example/": png_response(200),
+    }
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert report.fails == []
+
+
+def test_verify_fails_when_the_image_url_does_not_serve_an_image() -> None:
+    content = {"cards": [verify_card(1)]}
+    routes = {
+        "https://news.example/": article_page(),
+        "https://img.example/": httpx.Response(200, text="<html>페이지</html>"),
+    }
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("이미지를 안 준다" in f for f in report.fails)
+
+
+def test_verify_warns_when_a_card_has_no_image() -> None:
+    content = {"cards": [verify_card(1, image=None)]}
+
+    with verify_client({"https://news.example/": article_page()}) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert report.fails == []
+    assert any("기본 아트로 나간다" in w for w in report.warns)
+
+
+def test_verify_notes_the_article_title_so_a_human_can_compare() -> None:
+    """카드 10번이 알파경제 라벨로 TechCrunch 기사를 링크했던 사고를 사람이 잡게 한다."""
+    content = {"cards": [verify_card(1)]}
+    routes = {
+        "https://news.example/": article_page("오픈AI 추론칩 공개…성능 전격 공개"),
+        "https://img.example/": png_response(),
+    }
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("오픈AI 추론칩 공개" in note for note in report.notes)
+
+
+def test_verify_warns_when_card_and_article_titles_share_no_word() -> None:
+    content = {"cards": [verify_card(1, title="우주로 올라가는 AI 데이터센터")]}
+    routes = {
+        "https://news.example/": article_page("앤트로픽 기업가치 30조 달러 제시"),
+        "https://img.example/": png_response(),
+    }
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert any("겹치는 낱말이 없다" in w for w in report.warns)
+
+
+def test_verify_does_not_warn_when_the_article_is_in_another_language() -> None:
+    """한국어 카드와 영문 원문은 낱말이 겹칠 리가 없다 — 매번 경고하면 경고를 안 읽게 된다."""
+    content = {"cards": [verify_card(1, title="IPO 앞둔 오픈AI에서 떠난 데이터센터 총괄")]}
+    routes = {
+        "https://news.example/": article_page("OpenAI loses a top data center exec"),
+        "https://img.example/": png_response(),
+    }
+
+    with verify_client(routes) as client:
+        report = verify_edition.check_edition(content, client)
+
+    assert report.fails == []
+    assert not any("겹치는 낱말이 없다" in w for w in report.warns)
+
+
+def test_push_edition_refuses_when_the_link_check_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """검증은 기본으로 켜져 있다 — 죽은 링크가 있으면 POST 하지 않는다."""
+    payload = reference_payload()
+    payload["cards"][0]["link"]["href"] = "https://news.example/gone"
+    # 레퍼런스 fixture 의 media.image 는 번들 asset stem 이라 네트워크를 안 탄다.
+    edition_path = tmp_path / "edition.json"
+    edition_path.write_text(json.dumps(payload), encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text("ADMIN_API_KEY=secret\n", encoding="utf-8")
+    monkeypatch.setattr(push_edition, "ENV_FILE", env_file)
+    posted: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            posted.append(str(request.url))
+            return httpx.Response(200, content=request.content)
+        return httpx.Response(404)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(SystemExit) as exc:
+            push_edition.main([str(edition_path)], client=client)
+
+    assert "링크·이미지 검증 실패" in str(exc.value)
+    assert posted == []
 
 
 # ---- generate_qa ----
