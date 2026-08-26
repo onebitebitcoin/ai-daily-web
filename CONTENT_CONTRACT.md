@@ -46,7 +46,7 @@
 | | `stamp` | str | ✓ | |
 | | `restart` | str | ✓ | |
 | | `sources` | list[str] | ✓ | **카드에 실제로 링크한 매체만.** 수집기는 후보 전체의 `source_ref`를 넣어 주므로(36곳까지 나온다) 카드 10장을 고른 뒤 쓴 것만 남긴다. 카드 출처를 바꾸면 이 목록도 같이 고친다 — `verify_edition.py`가 어긋나면 FAIL |
-| | `disclaimer` | str | ✓ | 면책 문구 |
+| | `disclaimer` | str \| null | | **안 쓴다(2026-08-26~).** 넣지 말 것 — 없으면 프론트가 그 자리를 비운다. 옛 발행분에 남은 값은 그대로 보여준다 |
 | `trending` | — | object \| null | | **선택 블록(스키마상 optional).** 없으면 슬라이드 12장(표지+카드10+클로징), 있으면 클로징 앞에 트렌딩 슬라이드가 끼어 13장 |
 | | `eyebrow` | str | trending 있으면 ✓ | |
 | | `title` | str | trending 있으면 ✓ | |

@@ -46,7 +46,7 @@ export interface Closing {
   stamp: string;
   restart: string;
   sources: string[];
-  disclaimer: string;
+  disclaimer?: string | null;
 }
 
 export interface TrendingItem {

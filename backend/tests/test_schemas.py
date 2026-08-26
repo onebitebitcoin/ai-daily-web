@@ -17,6 +17,16 @@ def reference_payload() -> dict[str, Any]:
     return payload
 
 
+def test_closing_accepts_a_payload_without_a_disclaimer() -> None:
+    """면책 문구는 2026-08-26 부터 안 쓴다 — 없어도 스키마가 통과해야 한다."""
+    payload = reference_payload()
+    payload["closing"].pop("disclaimer", None)
+
+    content = EditionContent.model_validate(payload)
+
+    assert content.closing.disclaimer is None
+
+
 def test_reference_content_validates() -> None:
     content = EditionContent.model_validate(reference_payload())
 

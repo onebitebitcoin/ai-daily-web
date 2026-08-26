@@ -103,7 +103,9 @@ class Closing(_Strict):
     stamp: str
     restart: str
     sources: list[str]
-    disclaimer: str
+    # 면책 문구는 안 쓰기로 했다(2026-08-26). 옛 발행분에 남아 있어 필드는 살려두되,
+    # 없으면 프론트가 그 자리를 아예 비운다.
+    disclaimer: str | None = None
 
 
 class TrendingLink(_Strict):

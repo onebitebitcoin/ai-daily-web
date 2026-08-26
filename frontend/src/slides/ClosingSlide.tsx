@@ -66,7 +66,7 @@ export function ClosingSlide({
             <div className="src-list">{'출처 — ' + closing.sources.join(' · ')}</div>
           )}
 
-          <p className="disclaimer">{closing.disclaimer}</p>
+          {closing.disclaimer && <p className="disclaimer">{closing.disclaimer}</p>}
 
           {hasNextEdition && (
             <div className="cover-hint next-hint">
