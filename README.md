@@ -66,9 +66,11 @@ cp .env.example .env
 Postgres는 최초 init 때만 비밀번호를 반영하므로, 볼륨을 만든 뒤 바꾸려면
 `docker compose down -v`로 지우고 다시 올려야 한다.
 
-`DOMAIN`은 아직 비워둔다 — 이 프로젝트는 배포 도메인을 정하지 않았다. 정해지면
-이 값과 함께 `deploy/nginx/DOMAIN*.conf`, `backend/scripts/collect_daily.py`의
-`DEFAULT_EDITION_API`, `scripts/daily-cron.sh`의 `API`를 같이 채운다
+배포 도메인은 **`daily.onebitecoder.com`으로 예정**돼 있지만 아직 올리지 않았다 — 그전까지
+`DOMAIN`은 비워두고 로컬(`:8003`)로 발행한다. 실제로 띄울 때 이 값과 함께
+`deploy/nginx/DOMAIN*.conf`, `backend/scripts/collect_daily.py`의
+`DEFAULT_EDITION_API`, `backend/scripts/push_edition.py`·`recent_editions.py`의
+`DEFAULT_API`, `scripts/daily-cron.sh`의 `API`를 같이 채운다
 ([CONTENT_CONTRACT.md](CONTENT_CONTRACT.md#도메인이-정해지면) 참고).
 
 ```bash

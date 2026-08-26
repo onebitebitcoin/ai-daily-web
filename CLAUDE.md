@@ -13,7 +13,7 @@
 | 배제 축 | 알트코인 | **크립토** |
 | 표지 인용구 | 오스트리아학파 경제학자 | **AI·컴퓨팅 인물** (`ai_quotes.json`) |
 | 매체 간 중복 | 없음 (매체 11곳이라 불필요) | **`cluster_events` 필수** (매체 54곳) |
-| 배포 | daily.onebitebitcoin.com | **미정 — 로컬만** |
+| 배포 | daily.onebitebitcoin.com | **daily.onebitecoder.com 예정 — 아직 로컬만** |
 
 두 저장소는 완전히 독립이다. 한쪽 수정이 다른 쪽에 자동으로 반영되지 않는다.
 

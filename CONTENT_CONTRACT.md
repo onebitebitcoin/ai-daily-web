@@ -229,8 +229,9 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localh
 - 같은 `meta.date`로 다시 보내면 upsert다 — 오타 수정 후 재발행이 안전하다.
 - 발행 확인: `curl -s http://localhost:8003/api/editions`
 
-도메인이 정해지면 아래 네 곳을 함께 고친다 — 하나라도 빠지면 절반은 로컬을,
-절반은 프로덕션을 보는 상태로 어긋난다.
+도메인은 **`daily.onebitecoder.com`으로 정해졌다**(2026-08-26). 아직 올리지 않았으니
+그전까지는 로컬로 발행하고, 실제로 띄우는 날 아래를 함께 고친다 — 하나라도
+빠지면 절반은 로컬을, 절반은 프로덕션을 보는 상태로 어긋난다.
 
 | 파일 | 고칠 것 |
 |---|---|

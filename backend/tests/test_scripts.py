@@ -1091,6 +1091,19 @@ def test_og_image_url_absolutizes_a_relative_path() -> None:
     assert image == "https://news.example/photo/a.jpg"
 
 
+def test_og_image_url_unescapes_html_entities_in_the_url() -> None:
+    """속성값의 `&amp;` 를 그대로 쓰면 쿼리스트링이 깨진다(실측: itworld 이미지가 404)."""
+    html_doc = (
+        '<html><head><meta property="og:image" '
+        'content="https://img.example/a.jpg?quality=50&amp;w=1024" /></head>'
+    )
+
+    with og_client(html_doc) as c:
+        image = collect_daily.og_image_url(c, "https://news.example/1")
+
+    assert image == "https://img.example/a.jpg?quality=50&w=1024"
+
+
 def test_og_image_url_falls_back_to_twitter_image() -> None:
     html = '<html><head><meta name="twitter:image" content="https://img.example/t.jpg"></head>'
 

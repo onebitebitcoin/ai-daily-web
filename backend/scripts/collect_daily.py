@@ -21,6 +21,7 @@ Usage: python scripts/collect_daily.py [--date YYYY-MM-DD] [--out PATH]
 
 import argparse
 import datetime
+import html
 import io
 import json
 import re
@@ -594,9 +595,12 @@ def og_image_url(client: httpx.Client, url: str) -> str | None:
         print(f"경고: 원문 og:image 조회 실패, 건너뜀 ({url}): {exc!r}", file=sys.stderr)
         return None
     for tag in _OG_IMAGE_TAG.findall(response.text[:OG_HEAD_BYTES]):
-        content = _OG_CONTENT.search(tag)
-        if content and content.group(1).strip():
-            return urllib.parse.urljoin(str(response.url), content.group(1).strip())
+        found = _OG_CONTENT.search(tag)
+        if found and found.group(1).strip():
+            # 속성값은 HTML 이스케이프된 채로 들어온다 — `&amp;` 를 그대로 두면
+            # 쿼리스트링이 깨져 이미지 서버가 다른 것을 주거나 404 를 낸다.
+            raw = html.unescape(found.group(1).strip())
+            return urllib.parse.urljoin(str(response.url), raw)
     return None
 
 
