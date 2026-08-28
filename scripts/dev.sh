@@ -17,7 +17,9 @@ run_backend() {
 
 run_frontend() {
   cd "$repo_root/frontend"
-  exec npx vite --port 5176 --strictPort
+  # --host 를 빼면 [::1] 에만 붙어서 테일스케일 주소로는 안 열린다.
+  # MagicDNS 이름으로 붙을 때 필요한 allowedHosts 는 vite.config.ts 에 있다.
+  exec npx vite --port 5176 --strictPort --host 0.0.0.0
 }
 
 case "${1:-both}" in
