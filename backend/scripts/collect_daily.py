@@ -62,11 +62,12 @@ DEFAULT_BROAD_NEWS_URL = "http://localhost:8000/api/news?limit=500"
 # full=1 없으면 my-youtube 가 summary/highlights/description 을 뺀 경량 응답을 준다.
 # 그러면 filter_videos 의 `summary` 조건에 전부 걸려 후보가 조용히 0건이 된다(2026-08-05).
 DEFAULT_YOUTUBE_URL = "http://localhost:23456/api/queue?full=1"
-# 표지 인용구·영상·이미지 중복 회피가 읽는 발행 이력. btc-daily-web 은 프로덕션을
-# 기본값으로 두지만 여기는 아직 배포 도메인이 없다 — 로컬 백엔드(8003)를 본다.
-# 도메인이 정해지면 이 한 줄과 .env.example 의 DOMAIN, deploy/nginx/DOMAIN*.conf 를
-# 같이 채운다.
-DEFAULT_EDITION_API = "http://localhost:8003"
+# 표지 인용구·영상·이미지 중복 회피가 읽는 발행 이력. **프로덕션을 본다** —
+# 무인 발행이 프로덕션으로 나가므로 이력도 거기 쌓인다. 로컬 백엔드(8003)의
+# 이력은 별개라, 로컬만 보면 어제 뭐가 나갔는지 모르고 같은 카드를 또 낸다.
+# 로컬 드라이런은 `--edition-api http://localhost:8003` 으로 덮어쓴다.
+# (발행처 자체는 push_edition.py 의 --api 다. 이 값과 다른 축이다.)
+DEFAULT_EDITION_API = "https://daily.onebitecoder.com"
 # 카드 후보 뉴스 창. 트렌딩 집계 창(24h)과 다르다 — 집계는 "그날 무슨 일이
 # 있었나"라서 하루로 잘라야 맞지만, 카드 후보는 고를 게 많을수록 좋다.
 # 영상 창(VIDEO_WINDOW_HOURS)이 이미 48h 인 것과 같은 취지다.

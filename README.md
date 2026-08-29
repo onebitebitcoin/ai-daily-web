@@ -9,7 +9,8 @@
 차이는 [CLAUDE.md](CLAUDE.md)의 비교표를 본다. 두 저장소는 완전히 독립이고,
 한쪽 수정이 다른 쪽에 자동으로 반영되지 않는다.
 
-- 프로덕션: 아직 없다. 로컬(`http://localhost:8003`)에서만 돈다 — [발행](#발행) 참고.
+- 프로덕션: <https://daily.onebitecoder.com/ai> (루트 `/`는 `/ai/`로 301)
+- 로컬 개발: 백엔드 `:8003` · 프론트 `:5176`
 - 스펙: [SPEC.md](SPEC.md) · 콘텐츠 계약: [CONTENT_CONTRACT.md](CONTENT_CONTRACT.md)
 
 ## 구조
@@ -66,12 +67,12 @@ cp .env.example .env
 Postgres는 최초 init 때만 비밀번호를 반영하므로, 볼륨을 만든 뒤 바꾸려면
 `docker compose down -v`로 지우고 다시 올려야 한다.
 
-배포 도메인은 **`daily.onebitecoder.com`으로 예정**돼 있지만 아직 올리지 않았다 — 그전까지
-`DOMAIN`은 비워두고 로컬(`:8003`)로 발행한다. 실제로 띄울 때 이 값과 함께
-`deploy/nginx/DOMAIN*.conf`, `backend/scripts/collect_daily.py`의
-`DEFAULT_EDITION_API`, `backend/scripts/push_edition.py`·`recent_editions.py`의
-`DEFAULT_API`, `scripts/daily-cron.sh`의 `API`를 같이 채운다
-([CONTENT_CONTRACT.md](CONTENT_CONTRACT.md#도메인이-정해지면) 참고).
+`DOMAIN`은 `daily.onebitecoder.com`, `WEB_PORT`는 `8021`이다(같은 서버의
+btc-daily-web이 8020을 쓴다). **`ADMIN_API_KEY`는 새로 뽑지 말고 발행 머신의
+`backend/.env`에 있는 값을 그대로 옮긴다** — `push_edition.py`가 그 파일에서
+키를 읽어 POST하므로 두 값이 다르면 발행이 401로 막힌다.
+
+서버에서 처음 올릴 때는 [DEPLOY.md](DEPLOY.md)의 순서를 따른다.
 
 ```bash
 docker compose up -d --build
@@ -83,27 +84,25 @@ curl -s "localhost:${WEB_PORT:-8021}/health"     # {"status":"ok"}
 
 ### 2. 인그레스 + TLS
 
-호스트 nginx가 80/443과 인증서를 소유한다. `deploy/nginx/DOMAIN.conf` /
-`DOMAIN.bootstrap.conf`의 `DOMAIN`을 실제 도메인으로 바꾸고 파일명도
-`<도메인>.conf`로 바꾼 뒤 진행한다. 인증서가 없는 상태로 `:443` 블록을 넣으면
-`nginx -t`가 깨지므로 **2단계**로 올린다.
+호스트 nginx가 80/443과 인증서를 소유한다. 인증서가 없는 상태로 `:443` 블록을
+넣으면 `nginx -t`가 깨지므로 **2단계**로 올린다.
 
 ```bash
 # (1) :80 전용 vhost 먼저
-sudo cp deploy/nginx/<도메인>.bootstrap.conf \
-        /etc/nginx/sites-available/<도메인>
-sudo ln -sf /etc/nginx/sites-available/<도메인> \
-            /etc/nginx/sites-enabled/<도메인>
+sudo cp deploy/nginx/daily.onebitecoder.com.bootstrap.conf \
+        /etc/nginx/sites-available/daily.onebitecoder.com
+sudo ln -sf /etc/nginx/sites-available/daily.onebitecoder.com \
+            /etc/nginx/sites-enabled/daily.onebitecoder.com
 sudo nginx -t && sudo systemctl reload nginx
 
 # (2) 인증서 — 이 도메인 전용. 기존 공용 인증서에 --expand 하지 않는다
 #     (SAN 목록을 잘못 넘기면 기존 도메인이 갱신에서 조용히 빠진다)
 sudo certbot certonly --webroot -w /var/www/letsencrypt \
-     --cert-name <도메인> -d <도메인>
+     --cert-name daily.onebitecoder.com -d daily.onebitecoder.com
 
 # (3) TLS 포함 최종 vhost로 교체
-sudo cp deploy/nginx/<도메인>.conf \
-        /etc/nginx/sites-available/<도메인>
+sudo cp deploy/nginx/daily.onebitecoder.com.conf \
+        /etc/nginx/sites-available/daily.onebitecoder.com
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -121,17 +120,18 @@ git pull && docker compose up -d --build
 
 ## 발행
 
-수집 소스(my-news `:8000`, my-youtube `:23456`)는 개발 머신에만 있다. 도메인이
-없는 지금은 수집·문구작성·발행을 전부 로컬 백엔드(`:8003`)에서 한다:
+수집 소스(my-news `:8000`, my-youtube `:23456`)는 개발 머신에만 있다. 그래서
+수집·문구작성은 개발 머신에서 하고, 완성된 에디션만 프로덕션으로 POST한다:
 
 ```bash
 cd backend
-python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localhost:8003
+python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily.onebitecoder.com
 ```
 
-`backend/.env`에 `ADMIN_API_KEY`가 있어야 한다(로컬이라도 fail closed). 같은
-`meta.date`는 upsert이므로 재발행이 안전하다. 자세한 계약과 도메인이 정해졌을 때
-고칠 곳은 [CONTENT_CONTRACT.md](CONTENT_CONTRACT.md#4-발행-방법)에 있다.
+`backend/.env`에 `ADMIN_API_KEY`가 있어야 하고, 그 값이 **서버 `.env`의 것과
+같아야** 한다(아니면 401). 같은 `meta.date`는 upsert이므로 재발행이 안전하다.
+`--api`를 `http://localhost:8003`으로 주면 로컬 백엔드로 간다 — 리허설용이다.
+자세한 계약은 [CONTENT_CONTRACT.md](CONTENT_CONTRACT.md#4-발행-방법)에 있다.
 
 ## 백업 / 복구
 

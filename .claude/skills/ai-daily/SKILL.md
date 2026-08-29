@@ -32,7 +32,8 @@ description: 최근 24시간 my-news + my-youtube 데이터로 오늘자 AI 카�
 ### 1. 사전 확인
 
 ```bash
-curl -s localhost:8003/health          # {"status":"ok"} 여야 함
+curl -s localhost:8003/health                          # 로컬 백엔드(리허설용)
+curl -s https://daily.onebitecoder.com/health           # 발행처
 curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/news?asset=ai&limit=1"
 curl -s -o /dev/null -w "%{http_code}" "http://localhost:23456/api/queue"
 ```
@@ -209,7 +210,7 @@ my-news가 주는 `image_url`은 후보 100건 중 41건에만 붙어 있었다 
 
 ```bash
 cd backend && source .venv/bin/activate && \
-python scripts/recent_editions.py --api http://localhost:8003
+python scripts/recent_editions.py --api https://daily.onebitecoder.com
 ```
 
 발행 이력이 하나도 없으면 이 스크립트는 `SystemExit`으로 "이전 발행분이 없다 —
@@ -376,13 +377,16 @@ cd backend && source .venv/bin/activate && python scripts/generate_qa.py ../draf
 
 ### 6. 발행
 
-**이 프로젝트는 아직 배포 도메인이 없다.** btc-daily-web은 프로덕션으로
-쏘지만, 여기는 **로컬 백엔드(8003)가 지금 유일한 발행처다:**
+발행처는 **프로덕션(`https://daily.onebitecoder.com`)이다.** 사이트는 `/ai`
+서브패스에서 서빙되지만 API 경로는 루트 그대로다 — `--api`에 `/ai`를 붙이지 마라.
 
 ```bash
 cd backend && source .venv/bin/activate && \
-python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localhost:8003
+python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily.onebitecoder.com
 ```
+
+리허설은 `--api http://localhost:8003`으로 로컬 백엔드에 쏜다. 로컬로 쏜 건
+사이트에 안 올라간다.
 
 `push_edition.py`는 POST 전에 게이트 넷을 통과시킨다 — 스키마, 표지-날짜 일치,
 문구(2.1·2.2), 그리고 **링크·이미지 검증**(`verify_edition.py`). 마지막 것이
@@ -397,15 +401,17 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localh
 
 `--skip-link-check`는 네트워크가 없는 자리에서만 쓴다. 켜 두는 게 기본이다.
 
-`--api` 기본값은 `push_edition.py`·`recent_editions.py`·`collect_daily.py`
-셋 다 `http://localhost:8003`이라 생략해도 이 프로젝트 백엔드로 간다. 포크 직후
-둘이 8002(btc-daily-web)를 가리켜 남의 DB로 발행할 뻔했고, 지금은 테스트가
-세 값을 함께 고정한다(`test_edition_scripts_default_to_this_projects_backend`).
-그래도 명령줄에 적어 두는 편이 낫다 — 어디로 쏘는지 눈에 보인다.
+기본값이 축마다 다르니 **`--api`를 명령줄에 적어라** — 어디로 쏘는지 눈에 보인다.
 
-도메인이 정해지면 이 스킬의 6절·3.1절 `--api` 값을 프로덕션 주소로 바꿔야
-한다. `collect_daily.py`의 `DEFAULT_EDITION_API` 주석이 그 시점에 함께 채울
-곳(`.env.example`의 `DOMAIN`, `deploy/nginx/DOMAIN*.conf`)을 가리키고 있다.
+| 스크립트 | 기본값 |
+|---|---|
+| `push_edition.py`·`recent_editions.py`의 `DEFAULT_API` | 로컬 `:8003` |
+| `collect_daily.py`의 `DEFAULT_EDITION_API`(이력 조회) | 프로덕션 |
+
+`collect_daily.py`만 프로덕션이 기본인 이유는 무인 발행이 거기로 나가서다 —
+로컬 이력만 보면 어제 뭐가 나갔는지 몰라 같은 카드를 또 낸다. 포크 직후 셋 다
+8002(btc-daily-web)를 가리켜 남의 DB로 발행할 뻔했고, 지금은 테스트가 세 값을
+고정한다(`test_edition_scripts_default_to_this_projects_backend`).
 
 스키마 위반이면 POST 전에 로컬에서 잡아준다. 어떤 필드가 틀렸는지 출력되니
 고쳐서 재실행.
@@ -419,7 +425,7 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localh
 ### 7. 검증 후 보고
 
 ```bash
-curl -s "http://localhost:8003/api/editions/<date>" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['meta']); print(len(d['cards']), '장')"
+curl -s "https://daily.onebitecoder.com/api/editions/<date>" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['meta']); print(len(d['cards']), '장')"
 python scripts/verify_edition.py --date <date>    # 발행된 것을 한 번 더 훑는다
 ```
 
@@ -448,11 +454,11 @@ python scripts/verify_edition.py --date <date>    # 발행된 것을 한 번 더
 "앨라배마 주 법무장관이 오픈AI에 소환장을 보냈다"는 문장이 있었는데, 링크한 기사에도
 후보 100건 어디에도 없는 얘기였다. 후보에 없는 사실은 쓰지 마라. 이미 썼다면 지운다.
 
-**셋. 브라우저로 한 번 본다.** `http://localhost:5176/d/<date>` — 이미지 프록시는
+**셋. 브라우저로 한 번 본다.** `https://daily.onebitecoder.com/ai/d/<date>` — 이미지 프록시는
 24시간 캐시라 방금 바꾼 그림이면 하드 리로드(Cmd+Shift+R)해야 보인다.
 
 사용자에게 보고할 것: 발행된 날짜, 카드 10장의 제목 목록, `verify_edition.py`의
-FAIL·WARN 수, 눈으로 확인한 내용, 확인 URL(`http://localhost:5176/d/<date>`).
+FAIL·WARN 수, 눈으로 확인한 내용, 확인 URL(`https://daily.onebitecoder.com/ai/d/<date>`).
 
 ---
 

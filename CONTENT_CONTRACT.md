@@ -224,28 +224,30 @@ python scripts/push_edition.py drafts/edition-<date>.json --api http://localhost
 
 ### 도메인이 정해지면
 
-이 프로젝트는 아직 프로덕션 도메인이 없다. 수집 소스(my-news `:8000`, my-youtube
-`:23456`)도 개발 머신에만 있으므로, 수집·문구작성·발행을 전부 로컬에서 한다:
+수집 소스(my-news `:8000`, my-youtube `:23456`)는 개발 머신에만 있다. 수집과
+문구작성은 개발 머신에서 하고, 완성된 에디션만 프로덕션으로 POST한다:
 
 ```bash
-python scripts/push_edition.py ../drafts/edition-<date>.json --api http://localhost:8003
+python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily.onebitecoder.com
 ```
 
-- `backend/.env`에 `ADMIN_API_KEY`가 있어야 한다(로컬이라도 fail closed).
+- `backend/.env`의 `ADMIN_API_KEY`로 인증한다. **서버 `.env`의 값과 같아야 한다** —
+  다르면 401이고, 게이트를 다 통과한 뒤 마지막 POST에서만 드러난다.
 - 같은 `meta.date`로 다시 보내면 upsert다 — 오타 수정 후 재발행이 안전하다.
-- 발행 확인: `curl -s http://localhost:8003/api/editions`
+- 발행 확인: `curl -s https://daily.onebitecoder.com/api/editions`
+- 리허설은 `--api http://localhost:8003`으로 로컬 백엔드에 쏜다.
 
-도메인은 **`daily.onebitecoder.com`으로 정해졌다**(2026-08-26). 아직 올리지 않았으니
-그전까지는 로컬로 발행하고, 실제로 띄우는 날 아래를 함께 고친다 — 하나라도
-빠지면 절반은 로컬을, 절반은 프로덕션을 보는 상태로 어긋난다.
+### 발행처와 이력 조회처는 다른 축이다
 
-| 파일 | 고칠 것 |
-|---|---|
-| `.env.example`의 `DOMAIN` | 실제 도메인 |
-| `deploy/nginx/DOMAIN.bootstrap.conf`, `deploy/nginx/DOMAIN.conf` | 파일 안의 `DOMAIN` 플레이스홀더를 실제 도메인으로, 파일명도 `<도메인>.conf`로 바꾼 뒤 배포 |
-| `backend/scripts/collect_daily.py`의 `DEFAULT_EDITION_API` | 로컬(`http://localhost:8003`) → 프로덕션 URL |
-| `backend/scripts/push_edition.py`·`recent_editions.py`의 `DEFAULT_API` | 로컬 → 프로덕션 URL (셋을 함께 고정하는 테스트도 같이 고친다) |
-| `scripts/daily-cron.sh`의 `API` | 로컬 → 프로덕션 URL |
+기본값이 갈려 있다. 헷갈리면 프로덕션 이력을 안 보고 어제 카드를 또 낸다.
+
+| 스크립트 | 기본값 | 이유 |
+|---|---|---|
+| `push_edition.py` · `recent_editions.py`의 `DEFAULT_API` | 로컬 `:8003` | 손으로 돌릴 때 사고를 덜 내는 쪽 |
+| `collect_daily.py`의 `DEFAULT_EDITION_API` | 프로덕션 | 무인 발행이 거기로 나가니 "어제 뭐가 나갔나"도 거기서 읽어야 한다 |
+| `scripts/daily-cron.sh`의 `API` | 프로덕션 | 무인 발행의 실제 대상 |
+
+세 값은 `test_edition_scripts_default_to_this_projects_backend`가 고정한다.
 
 ## 5. 이미지 규칙
 

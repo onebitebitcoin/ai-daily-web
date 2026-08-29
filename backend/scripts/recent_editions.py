@@ -5,7 +5,7 @@ JSON을 통째로 읽으면 본문·Q&A까지 딸려와 컨텍스트만 잡아�
 `num / chip / title / 매체`만 남긴다. 어떤 카드가 같은 사건인지 묶는 판단은
 스크립트가 아니라 사람(Claude)이 SKILL.md 3.1의 기준으로 한다.
 
-Usage: python scripts/recent_editions.py --api https://daily.onebitebitcoin.com
+Usage: python scripts/recent_editions.py --api https://daily.onebitecoder.com
        python scripts/recent_editions.py --days 10 --before 2026-08-07
 """
 

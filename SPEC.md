@@ -100,9 +100,9 @@ DB 키와 반드시 일치) 하나만 추가.
 - `postgres` (named volume, healthcheck)
 - `backend` (uvicorn, 컨테이너 시작 시 `alembic upgrade head`)
 - `frontend` (멀티스테이지: `vite build` → 정적 파일만 남김)
-- `nginx` (frontend 정적 서빙 + `/api/*` → backend 리버스프록시 + TLS. 도메인/인증서는
-  `.env`의 `DOMAIN`/`CERTBOT_EMAIL`로 설정 — 실제 발급은 배포 시점에 수행, 지금은
-  플레이스홀더로 구조만 갖춘다)
+- `nginx` (frontend 정적 서빙 + `/api/*` → backend 리버스프록시 + SPA fallback.
+  카드뉴스는 `/ai` 서브패스에 있고 루트 `/`는 `/ai/`로 301한다. TLS는 이 컨테이너가
+  아니라 **호스트 nginx**가 종단한다 — `deploy/nginx/daily.onebitecoder.com.conf`)
 
 WebSocket/SSE 없음 — 데일리 데이터지 실시간이 아니다. 필요해지면 그때 추가.
 

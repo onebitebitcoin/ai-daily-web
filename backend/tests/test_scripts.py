@@ -1329,17 +1329,25 @@ def test_collect_daily_main_fails_loudly_when_source_down(tmp_path: Path) -> Non
 
 
 def test_edition_scripts_default_to_this_projects_backend() -> None:
-    """포크가 남긴 8002(btc-daily-web) 기본값의 회귀 테스트.
+    """포크가 남긴 btc-daily-web 기본값의 회귀 테스트.
 
-    `--api` 를 빠뜨리면 오늘자 AI 에디션이 btc-daily-web 의 DB 로 들어가고,
-    중복 점검은 남의 발행 이력을 읽는다. 에디션을 건드리는 세 스크립트가 같은
-    곳을 봐야 한다(포트는 CLAUDE.md 가 고정한 8003).
+    `--api` 를 빠뜨렸을 때 오늘자 AI 에디션이 btc-daily-web 으로 새는 걸 막는다.
+    축이 둘이라 기본값도 둘로 갈린다:
+
+    - 발행처(push/recent) = 로컬 :8003. 손으로 돌릴 때 사고를 덜 내는 쪽이
+      기본이어야 한다. 프로덕션 발행은 daily-cron.sh 가 `--api` 로 명시한다.
+    - 이력 조회(collect) = 프로덕션. 무인 발행이 거기로 나가므로 "어제 뭐가
+      나갔나"도 거기서 읽어야 중복 점검이 성립한다.
+
+    어느 쪽이든 onebitebitcoin 이 섞이면 안 된다.
     """
     assert push_edition.DEFAULT_API == "http://localhost:8003"
     assert recent_editions.DEFAULT_API == "http://localhost:8003"
-    assert collect_daily.DEFAULT_EDITION_API == "http://localhost:8003"
     assert push_edition.parse_args(["edition.json"]).api == "http://localhost:8003"
     assert recent_editions.parse_args([]).api == "http://localhost:8003"
+
+    assert collect_daily.DEFAULT_EDITION_API == "https://daily.onebitecoder.com"
+    assert "onebitebitcoin" not in collect_daily.DEFAULT_EDITION_API
 
 
 

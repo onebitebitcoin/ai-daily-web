@@ -6,10 +6,10 @@
 set -u
 
 ROOT=/Users/nsw/meeting_room/lab/ai-daily-web
-# 이 프로젝트는 아직 프로덕션 도메인이 없다 — 로컬 백엔드를 그대로 발행 대상으로
-# 쓴다(백엔드가 :8003 에 떠 있어야 한다). 도메인이 정해지면 이 한 줄만 바꾼다
-# (CONTENT_CONTRACT.md "도메인이 정해지면" 절에 함께 고칠 나머지 세 곳이 있다).
-API=http://localhost:8003
+# 발행 대상. 프로덕션이다 — 로컬 :8003 백엔드는 개발용이라 여기 적으면 사이트에
+# 아무것도 안 올라간다. push_edition.py 는 로컬 backend/.env 의 ADMIN_API_KEY 로
+# 인증하므로 그 값이 서버 .env 의 것과 같아야 한다(다르면 401).
+API=https://daily.onebitecoder.com
 LOG="$ROOT/logs/daily-cron-$(date +%F).log"
 mkdir -p "$ROOT/logs"
 
