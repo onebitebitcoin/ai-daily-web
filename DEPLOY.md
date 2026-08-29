@@ -124,13 +124,18 @@ curl -sI localhost:8021/ | grep -iE '^(HTTP|location)'
 #   → HTTP/1.1 301 / Location: /ai/
 #   Location 이 `/ai/` 상대 경로여야 한다. `http://…/ai/` 절대 URL 이면
 #   absolute_redirect off 가 없는 옛 이미지다(https 가 http 로 한 번 떨어진다).
-curl -s localhost:8021/ai/ | grep -o '/ai/assets/[^"]*'
-#   → /ai/assets/index-*.js 와 .css
+# index.html 이 참조하는 자산을 **실제로 받아본다**. HTML 안의 경로만 grep 하면
+# 파일이 없어도 통과한다 — 2026-08-29 첫 배포가 정확히 그렇게 새어 나갔다.
+for p in $(curl -s localhost:8021/ai/ | grep -o '/ai/assets/[^"]*'); do
+  printf "%s -> " "$p"; curl -s -o /dev/null -w "%{http_code}\n" "localhost:8021$p"
+done
+#   → 모두 200. 하나라도 404 면 dist 가 html 루트에 풀린 옛 이미지다
 ```
 
-마지막 둘이 이 배포의 핵심이다. `301`이 안 나오면 `frontend/nginx.conf`의
-`location = /` 블록이 없는 옛 이미지다 — 1단계로 돌아가 커밋을 확인하고
-`docker compose up -d --build`를 다시 돌려라.
+셋 다 통과해야 이 배포가 끝난 것이다. `301`이 안 나오면 `frontend/nginx.conf`의
+`location = /` 블록이 없는 옛 이미지고, 자산이 404 면 Dockerfile 이 dist 를
+`/usr/share/nginx/html/ai` 로 넣지 않는 옛 이미지다 — 1단계로 돌아가 커밋을
+확인하고 `docker compose up -d --build`를 다시 돌려라.
 
 `web`은 `127.0.0.1`에만 바인딩된다. 공인 IP로 8021이 열려 있으면 안 된다:
 
@@ -192,7 +197,11 @@ curl -sIL https://daily.onebitecoder.com/ | grep -iE '^(HTTP|location)'
 #   → 301, Location: /ai/  그리고 200. 중간에 http:// 가 끼면 안 된다
 curl -s  https://daily.onebitecoder.com/health            # {"status":"ok"}
 curl -s  https://daily.onebitecoder.com/api/editions      # []
-curl -s https://daily.onebitecoder.com/ai/ | grep -c '/ai/assets/'   # 2
+for p in $(curl -s https://daily.onebitecoder.com/ai/ | grep -o '/ai/assets/[^"]*'); do
+  printf "%s -> " "$p"
+  curl -s -o /dev/null -w "%{http_code}\n" "https://daily.onebitecoder.com$p"
+done
+#   → 모두 200
 ```
 
 리다이렉트 체인에 `http://`가 한 홉이라도 보이면 컨테이너 이미지가 옛것이다 —
