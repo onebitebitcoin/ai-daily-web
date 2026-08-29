@@ -123,11 +123,18 @@ const SLIDES_PER_EDITION = base.cards.length + 2;
 /** 한 칸 내려가고 실제로 반영될 때까지 기다린다.
  *
  *  keyDown을 연달아 쏘면 안 된다 — 리렌더 전에는 핸들러가 같은 `current`를 물고
- *  있어 두 번 눌러도 한 칸만 움직인다. 로컬에서는 우연히 통과하고 CI에서 깨졌다. */
+ *  있어 두 번 눌러도 한 칸만 움직인다. 로컬에서는 우연히 통과하고 CI에서 깨졌다.
+ *
+ *  타임아웃을 기본값(1s)보다 늘려 잡는다. 끝에서 두 칸 앞에 닿으면 다음 날짜
+ *  에디션을 fetch 해 슬라이드를 덧붙이는데, 그 왕복이 끼는 칸에서는 1s 가 빠듯하다
+ *  — CI(2026-08-29 첫 실행)에서 이 자리가 깨졌고 로컬에서도 부하를 주면 20 번에
+ *  한 번 꼴로 재현된다. 대기 시간을 늘리는 것은 통과를 앞당기지 않는다, 느린
+ *  기계에서 성급하게 포기하지 않을 뿐이다. */
 async function advance(container: HTMLElement, to: number) {
   fireEvent.keyDown(window, { key: 'ArrowDown' });
-  await waitFor(() =>
-    expect(container.querySelectorAll('.slide')[to]?.className).toContain('is-active'),
+  await waitFor(
+    () => expect(container.querySelectorAll('.slide')[to]?.className).toContain('is-active'),
+    { timeout: 5000 },
   );
 }
 

@@ -72,21 +72,14 @@ jobs:
       - name: "Build"
         run: npm run build
 
-  deploy:
-    needs: [backend, frontend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, btc-daily-web]
-    timeout-minutes: 10
-
-    steps:
-      # self-hosted 러너가 이미 /home/measly/btc-daily-web에서 도는 컨테이너와
-      # 같은 서버에 있다 — actions/checkout으로 별도 워크스페이스에 받지 않고
-      # 배포용 클론 디렉토리를 직접 최신화한다 (.env·볼륨이 거기 있음).
-      - name: "Deploy (pull + rebuild + restart)"
-        run: |
-          set -euo pipefail
-          cd /home/measly/btc-daily-web
-          git fetch origin main
-          git pull --ff-only origin main
-          docker compose build backend web
-          docker compose up -d backend web
+  # deploy job 을 두지 않는다.
+  #
+  # 포크 원본(btc-daily-web)에는 self-hosted 러너로 pull + rebuild 하는 job 이
+  # 있었다. 그 러너(measly-btc-daily)는 btc-daily-web 저장소에 등록된 repo 스코프라
+  # 여기서는 잡히지 않고, 계정이 User 라 org 레벨 러너도 없다 — 그대로 두면 push
+  # 마다 deploy job 이 영영 대기한다. job 본문도 /home/measly/btc-daily-web 을
+  # 가리켜서, 설령 잡히더라도 남의 프로젝트를 다시 배포한다.
+  #
+  # 그래서 이 저장소의 배포는 수동이다 — DEPLOY.md 7 절(git pull + docker compose
+  # up -d --build). 나중에 ai-daily-web 용 러너를 붙이면 그때 job 을 되살리되,
+  # 경로와 runs-on 라벨을 이 프로젝트 것으로 바꿔야 한다.
