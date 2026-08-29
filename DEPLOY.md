@@ -44,15 +44,16 @@ DNS는 Cloudflare 프록시(주황 구름) 뒤에 있어도 된다 — `dig`에�
 ## 1. 코드 배치
 
 ```bash
-sudo mkdir -p /srv && cd /srv
-git clone <저장소 URL> ai-daily-web     # 이미 있으면 git pull
-cd /srv/ai-daily-web
+cd /home/measly
+git clone https://github.com/onebitebitcoin/ai-daily-web.git   # 이미 있으면 git pull
+cd /home/measly/ai-daily-web
 git log --oneline -1
 ```
 
-> 경로는 서버 관례에 맞춘다. btc-daily-web이 있는 곳과 같은 부모 디렉토리에
-> 두면 관리가 쉽다 — `ls -d /srv/btc-daily-web /opt/btc-daily-web 2>/dev/null`로
-> 먼저 확인하고 그 옆에 붙여라.
+> `/home/measly`는 btc-daily-web이 있는 자리다(`/home/measly/btc-daily-web`).
+> 형제 프로젝트를 같은 부모 아래 둔다. 다르면 `ls -d /home/measly/btc-daily-web`
+> 으로 실제 위치를 먼저 확인하고 그 옆에 붙여라 — 이 문서의 나머지 경로도 같이
+> 바꿔야 한다.
 
 **확인** — `/ai` 서브패스가 들어온 커밋인지 본다. 이게 없으면 옛 코드다:
 
@@ -233,8 +234,9 @@ launchctl load ~/Library/LaunchAgents/com.nsw.ai-daily.plist
 launchctl list | grep ai-daily
 ```
 
-매일 06:00 KST에 발화한다. 오늘자 에디션이 프로덕션에 이미 있으면 아무것도 하지
-않는다(`SKIP` 로그만 남는다). 손으로 한 번 돌려보려면:
+매일 **06:10 KST**에 발화한다(btc-daily가 06:00이라 10분 비켜 뒀다 — 둘 다 claude를
+부르고 같은 소스 서버를 두드린다). 오늘자 에디션이 프로덕션에 이미 있으면 아무것도
+하지 않는다(`SKIP` 로그만 남는다). 손으로 한 번 돌려보려면:
 
 ```bash
 zsh scripts/daily-cron.sh && tail -40 logs/daily-cron-$(date +%F).log
@@ -245,7 +247,7 @@ zsh scripts/daily-cron.sh && tail -40 logs/daily-cron-$(date +%F).log
 ## 7. 갱신 배포 (다음부터)
 
 ```bash
-cd /srv/ai-daily-web && git pull && docker compose up -d --build
+cd /home/measly/ai-daily-web && git pull && docker compose up -d --build
 curl -s localhost:8021/health
 ```
 
