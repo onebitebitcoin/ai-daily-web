@@ -259,15 +259,56 @@ zsh scripts/daily-cron.sh && tail -40 logs/daily-cron-$(date +%F).log
 
 ---
 
-## 7. 갱신 배포 (다음부터)
+## 7. 갱신 배포 (다음부터) — 자동
+
+`main`에 푸시하면 끝난다. 손으로 서버에 들어갈 일이 없다.
+
+`.github/workflows/ci.yml`의 `deploy` job이 self-hosted 러너에서 `git pull` →
+`docker compose build backend web` → `up -d` → **자산을 실제로 GET 해 200 확인**까지
+한다. `backend`·`frontend` job이 통과해야만 돈다(`needs`).
+
+| | 값 |
+|---|---|
+| 러너 이름 | `measly-ai-daily` |
+| 러너 라벨 | `self-hosted, ai-daily-web` ← btc 러너 라벨(`btc-daily-web`)과 반드시 달라야 한다 |
+| 러너 경로 | `/home/measly/actions-runner-ai-daily` |
+| systemd | `actions.runner.onebitebitcoin-ai-daily-web.measly-ai-daily.service` |
+
+```bash
+# 러너 상태
+systemctl status actions.runner.onebitebitcoin-ai-daily-web.measly-ai-daily.service
+gh api repos/onebitebitcoin/ai-daily-web/actions/runners \
+  --jq '.runners[] | "\(.name) \(.status) \([.labels[].name]|join(","))"'
+
+# 배포 결과
+gh run list --repo onebitebitcoin/ai-daily-web --limit 5
+```
+
+마이그레이션은 backend 컨테이너가 기동하며 `alembic upgrade head`로 적용한다.
+호스트 nginx vhost(`/etc/nginx`)는 자동화에 들어 있지 **않다** — `deploy/nginx/`의
+파일이 바뀐 경우에만 사람이 `sudo nginx -t` 후 손으로 복사한다. 컨테이너 안의
+`frontend/nginx.conf`는 이미지에 들어가므로 자동 배포에 포함된다.
+
+### 손으로 배포해야 할 때
+
+러너가 죽었거나 워크플로를 우회할 때만 쓴다:
 
 ```bash
 cd /home/measly/ai-daily-web && git pull && docker compose up -d --build
 curl -s localhost:8021/health
 ```
 
-마이그레이션은 backend 컨테이너가 기동하며 `alembic upgrade head`로 적용한다.
-nginx vhost는 이 저장소 파일이 바뀐 경우에만 다시 복사한다.
+### 러너를 다시 붙일 때
+
+등록 토큰은 일회용이라 매번 새로 받는다:
+
+```bash
+cd /home/measly/actions-runner-ai-daily
+TOKEN=$(gh api -X POST repos/onebitebitcoin/ai-daily-web/actions/runners/registration-token --jq .token)
+./config.sh --url https://github.com/onebitebitcoin/ai-daily-web --token "$TOKEN" \
+  --name measly-ai-daily --labels ai-daily-web --work _work --unattended --replace
+sudo ./svc.sh install measly && sudo ./svc.sh start
+```
 
 ---
 

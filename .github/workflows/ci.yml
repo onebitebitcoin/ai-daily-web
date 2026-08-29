@@ -72,14 +72,51 @@ jobs:
       - name: "Build"
         run: npm run build
 
-  # deploy job 을 두지 않는다.
-  #
-  # 포크 원본(btc-daily-web)에는 self-hosted 러너로 pull + rebuild 하는 job 이
-  # 있었다. 그 러너(measly-btc-daily)는 btc-daily-web 저장소에 등록된 repo 스코프라
-  # 여기서는 잡히지 않고, 계정이 User 라 org 레벨 러너도 없다 — 그대로 두면 push
-  # 마다 deploy job 이 영영 대기한다. job 본문도 /home/measly/btc-daily-web 을
-  # 가리켜서, 설령 잡히더라도 남의 프로젝트를 다시 배포한다.
-  #
-  # 그래서 이 저장소의 배포는 수동이다 — DEPLOY.md 7 절(git pull + docker compose
-  # up -d --build). 나중에 ai-daily-web 용 러너를 붙이면 그때 job 을 되살리되,
-  # 경로와 runs-on 라벨을 이 프로젝트 것으로 바꿔야 한다.
+  deploy:
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # 이 저장소에 등록된 repo 스코프 러너다(measly-ai-daily,
+    # /home/measly/actions-runner-ai-daily). 라벨을 btc-daily-web 으로 두면 남의
+    # 프로젝트 디렉토리를 배포하게 되므로 반드시 ai-daily-web 이어야 한다.
+    runs-on: [self-hosted, ai-daily-web]
+    timeout-minutes: 10
+    # 푸시가 연달아 나면 뒤엣것이 앞엣것의 rebuild 중간에 컨테이너를 갈아끼운다.
+    concurrency:
+      group: deploy-ai-daily-web
+      cancel-in-progress: false
+
+    steps:
+      # self-hosted 러너가 이미 /home/measly/ai-daily-web 에서 도는 컨테이너와 같은
+      # 서버에 있다 — actions/checkout 으로 별도 워크스페이스에 받지 않고 배포용 클론
+      # 디렉토리를 직접 최신화한다 (.env·볼륨이 거기 있다).
+      - name: "Deploy (pull + rebuild + restart)"
+        run: |
+          set -euo pipefail
+          cd /home/measly/ai-daily-web
+          git fetch origin main
+          git pull --ff-only origin main
+          docker compose build backend web
+          docker compose up -d backend web
+
+      # 깨진 배포에 초록불이 나가지 않게 한다. 자산을 **실제로 GET 해서** 200 을
+      # 본다 — HTML 안의 경로만 grep 하면 파일이 없어도 통과한다(2026-08-29 첫
+      # 배포가 정확히 그렇게 새어 나갔다. DEPLOY.md 3 절과 같은 검사다).
+      - name: "Verify"
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 15); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8021/health || true)
+            [ "$code" = "200" ] && break
+            [ "$i" = "15" ] && { echo "health 가 200 이 아니다: $code"; exit 1; }
+            sleep 2
+          done
+
+          html=$(curl -fsS localhost:8021/ai/)
+          assets=$(printf '%s' "$html" | grep -oE '/ai/assets/[A-Za-z0-9_.-]+' | sort -u)
+          [ -n "$assets" ] || { echo "index.html 에서 자산 경로를 못 찾았다"; exit 1; }
+
+          for a in $assets; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "localhost:8021$a")
+            echo "$code  $a"
+            [ "$code" = "200" ] || { echo "자산이 200 이 아니다"; exit 1; }
+          done
