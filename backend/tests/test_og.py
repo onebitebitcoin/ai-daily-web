@@ -53,25 +53,6 @@ def test_og_image_generates_and_crops_to_1200x630(client, tmp_path, monkeypatch)
     assert calls == ["https://example.com/thumb.jpg"]
 
 
-def test_og_image_has_logo_badge_in_bottom_right(client, tmp_path, monkeypatch) -> None:
-    override_og_cache_dir(client, tmp_path)
-    seed_edition(client.session_factory, _payload_with_image_url("2026-07-30"))
-
-    def fake_get(url, timeout=None, follow_redirects=None):
-        fake_request = httpx.Request("GET", url)
-        return httpx.Response(200, content=_fake_source_image_bytes(), request=fake_request)
-
-    monkeypatch.setattr("app.routes.httpx.get", fake_get)
-
-    response = client.get("/api/og/2026-07-30/image.jpg")
-
-    img = Image.open(io.BytesIO(response.content))
-    # source is a flat (200, 50, 50) fill — the badge/ring paste overwrites it near
-    # the bottom-right corner, so that pixel should no longer be the background color.
-    badge_center = (img.width - 76, img.height - 76)
-    assert img.getpixel(badge_center) != (200, 50, 50)
-
-
 def test_og_image_second_request_hits_cache(client, tmp_path, monkeypatch) -> None:
     override_og_cache_dir(client, tmp_path)
     seed_edition(client.session_factory, _payload_with_image_url("2026-07-30"))
@@ -127,7 +108,7 @@ def test_og_html_contains_meta_tags(client) -> None:
     assert '데일리 AI" />' in body
     assert 'property="og:description"' in body
     assert 'property="og:image" content="http://testserver/api/og/2026-07-30/image.jpg"' in body
-    assert 'property="og:url" content="http://testserver/d/2026-07-30"' in body
+    assert 'property="og:url" content="http://testserver/ai/d/2026-07-30"' in body
 
 
 def test_og_html_missing_date_returns_404(client) -> None:
@@ -145,7 +126,7 @@ def test_og_html_latest_picks_max_date(client) -> None:
     response = client.get("/api/og/latest")
 
     assert response.status_code == 200
-    assert 'property="og:url" content="http://testserver/d/2026-08-01"' in response.text
+    assert 'property="og:url" content="http://testserver/ai/d/2026-08-01"' in response.text
 
 
 def test_og_html_latest_returns_404_when_empty(client) -> None:

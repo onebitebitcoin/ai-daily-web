@@ -1,5 +1,4 @@
 import { Fragment } from 'react';
-import hanipLogo from '../assets/brand/hanip-logo.jpg';
 import type { Closing } from '../content';
 
 interface ClosingSlideProps {
@@ -51,10 +50,7 @@ export function ClosingSlide({
             </div>
           )}
 
-          <span className="stamp">
-            <img className="stamp-logo" src={hanipLogo} alt="" />
-            {closing.stamp}
-          </span>
+          <span className="stamp">{closing.stamp}</span>
 
           <button className="restart" type="button" onClick={onRestart}>
             {closing.restart}

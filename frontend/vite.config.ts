@@ -3,6 +3,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  // /ai 경로 밑에서 서빙한다 — 앞으로 이 도메인 루트에 다른 시리즈가 올라올 수 있어서
+  // 이 카드뉴스는 서브패스로 물러난다.
+  base: '/ai/',
   plugins: [react()],
   server: {
     // 포트 고정. 5173은 my-academy, 5175는 btc-daily-web이 쓴다.

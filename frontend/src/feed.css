@@ -379,7 +379,6 @@ body {
   padding: 6px 14px; border-radius: 3px; transform: rotate(-3deg);
   display: inline-flex; align-items: center; gap: 7px;
 }
-.stamp-logo { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
 .restart {
   margin-top: 16px; font-family: 'Card Text', monospace; font-size: 12px;
   color: var(--ink-dim); background: none; border: 1px solid var(--line); cursor: pointer;

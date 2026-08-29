@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { MonthCalendar } from './Calendar';
-import hanipLogo from './assets/brand/hanip-logo.jpg';
 import './chrome.css';
 import './calendar.css';
 
@@ -54,10 +53,7 @@ export function FeedChrome({
       </div>
 
       <div className="topline">
-        <span className="brand">
-          <img className="brand-logo" src={hanipLogo} alt="" />
-          {brand}
-        </span>
+        <span className="brand">{brand}</span>
         <button
           type="button"
           className="date-chip"
