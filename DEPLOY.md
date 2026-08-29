@@ -120,8 +120,10 @@ backend는 기동하면서 `alembic upgrade head`를 돌린다. 마이그레이�
 ```bash
 curl -s localhost:8021/health                    # {"status":"ok"}
 curl -s localhost:8021/api/editions              # [] (아직 발행 전이라 빈 배열)
-curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" localhost:8021/
-#   → 301 http://localhost:8021/ai/
+curl -sI localhost:8021/ | grep -iE '^(HTTP|location)'
+#   → HTTP/1.1 301 / Location: /ai/
+#   Location 이 `/ai/` 상대 경로여야 한다. `http://…/ai/` 절대 URL 이면
+#   absolute_redirect off 가 없는 옛 이미지다(https 가 http 로 한 번 떨어진다).
 curl -s localhost:8021/ai/ | grep -o '/ai/assets/[^"]*'
 #   → /ai/assets/index-*.js 와 .css
 ```
@@ -186,11 +188,15 @@ sudo nginx -t && sudo systemctl reload nginx
 **확인**
 
 ```bash
-curl -sI https://daily.onebitecoder.com/ | head -3        # 301 → /ai/
+curl -sIL https://daily.onebitecoder.com/ | grep -iE '^(HTTP|location)'
+#   → 301, Location: /ai/  그리고 200. 중간에 http:// 가 끼면 안 된다
 curl -s  https://daily.onebitecoder.com/health            # {"status":"ok"}
 curl -s  https://daily.onebitecoder.com/api/editions      # []
 curl -s https://daily.onebitecoder.com/ai/ | grep -c '/ai/assets/'   # 2
 ```
+
+리다이렉트 체인에 `http://`가 한 홉이라도 보이면 컨테이너 이미지가 옛것이다 —
+3단계의 `Location: /ai/` 확인으로 돌아간다.
 
 갱신은 certbot이 등록한 스케줄 작업이 처리한다. 이 문서를 다시 쓸 일은 없다.
 
