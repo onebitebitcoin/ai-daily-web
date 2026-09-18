@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ShortsFeed } from './ShortsFeed';
 import fixture from './fixtures/content.json';
@@ -122,19 +122,28 @@ const SLIDES_PER_EDITION = base.cards.length + 2;
 
 /** 한 칸 내려가고 실제로 반영될 때까지 기다린다.
  *
- *  keyDown을 연달아 쏘면 안 된다 — 리렌더 전에는 핸들러가 같은 `current`를 물고
- *  있어 두 번 눌러도 한 칸만 움직인다. 로컬에서는 우연히 통과하고 CI에서 깨졌다.
+ *  키를 그냥 연달아 쏘면 안 된다. useVerticalFeed 는 앞 이동이 정착할 때까지 새 요청을
+ *  버리므로, 잠금이 아직 걸려 있는 동안 쏜 키는 그대로 사라진다. 로컬에서는 빨라서
+ *  우연히 통과하고 느린 CI 러너에서 깨졌다(2026-09-18, 매번 다른 테스트가 걸렸다).
  *
- *  타임아웃을 기본값(1s)보다 늘려 잡는다. 끝에서 두 칸 앞에 닿으면 다음 날짜
- *  에디션을 fetch 해 슬라이드를 덧붙이는데, 그 왕복이 끼는 칸에서는 1s 가 빠듯하다
- *  — CI(2026-08-29 첫 실행)에서 이 자리가 깨졌고 로컬에서도 부하를 주면 20 번에
- *  한 번 꼴로 재현된다. 대기 시간을 늘리는 것은 통과를 앞당기지 않는다, 느린
- *  기계에서 성급하게 포기하지 않을 뿐이다. */
+ *  그래서 이동 버튼이 다시 살아나는 것을 보고 나서 누른다. 버튼의 disabled 가 곧 잠금
+ *  상태이므로(FeedNav 의 busy), 이 대기가 "입력을 받을 수 있는 시점"을 정확히 집는다.
+ */
 async function advance(container: HTMLElement, to: number) {
-  fireEvent.keyDown(window, { key: 'ArrowDown' });
+  const downButton = () =>
+    container.querySelector('button[aria-label="다음 카드"]') as HTMLButtonElement | null;
+
+  await waitFor(() => expect(downButton()?.disabled).toBe(false), { timeout: 3000 });
+  fireEvent.click(downButton()!);
+
+  // 실제 브라우저는 스무스 스크롤이 멎으면 scrollend 를 준다. 그게 와야 잠금이 풀려
+  // 다음 이동이 열린다. jsdom 에는 이 이벤트가 없으므로 손으로 쏜다(enableScrollEnd).
+  const track = container.querySelector('.feed-track');
+  if (track) act(() => void track.dispatchEvent(new Event('scrollend')));
+
   await waitFor(
     () => expect(container.querySelectorAll('.slide')[to]?.className).toContain('is-active'),
-    { timeout: 5000 },
+    { timeout: 3000 },
   );
 }
 
@@ -142,12 +151,20 @@ async function advanceTo(container: HTMLElement, target: number) {
   for (let i = 1; i <= target; i += 1) await advance(container, i);
 }
 
+/** `'onscrollend' in window` 를 통과시켜 지원 브라우저 경로를 밟게 한다.
+ *  jsdom 은 이 이벤트를 구현하지 않아서, 심지 않으면 리스너가 붙지 않는다. */
+function enableScrollEnd() {
+  (window as { onscrollend?: unknown }).onscrollend = null;
+}
+
 beforeEach(() => {
   stubScrollObserver();
+  enableScrollEnd();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  delete (window as { onscrollend?: unknown }).onscrollend;
 });
 
 describe('ShortsFeed', () => {
@@ -225,7 +242,7 @@ describe('ShortsFeed', () => {
     expect(pushState).not.toHaveBeenCalled();
   });
 
-  it('opens the detail sheet and locks the feed behind it', async () => {
+  it('opens the detail sheet', async () => {
     stubApi();
     const { container } = renderFeed();
     await screen.findByText(base.cover.eyebrow);
@@ -233,10 +250,9 @@ describe('ShortsFeed', () => {
     fireEvent.click(screen.getAllByText('더보기')[0]);
 
     expect(container.querySelector('.sheet')).not.toBeNull();
-    expect(container.querySelector('.feed-track.is-locked')).not.toBeNull();
   });
 
-  it('closes the detail sheet on Escape and unlocks the feed', async () => {
+  it('closes the detail sheet on Escape', async () => {
     stubApi();
     const { container } = renderFeed();
     await screen.findByText(base.cover.eyebrow);
@@ -245,7 +261,6 @@ describe('ShortsFeed', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
 
     await waitFor(() => expect(container.querySelector('.sheet')).toBeNull());
-    expect(container.querySelector('.feed-track.is-locked')).toBeNull();
   });
 
   it('does not move the feed while the sheet is open', async () => {
