@@ -20,7 +20,7 @@
 
 ## 한 도메인, 두 시리즈 (MANDATORY)
 
-`daily.onebitecoder.com` 에는 이 저장소(`/ai`)와 `quantum-daily-web`(`/quantum`)이
+`daily.onebitecoder.com` 에는 이 저장소(`/ai`)와 `quantum-weekly-web`(`/quantum`)이
 함께 올라가 있다. **각 시리즈가 자기 서브패스 아래를 통째로 소유한다** — 화면도
 API 도 헬스체크도 그 밑이다. 도메인 루트는 어느 쪽의 것도 아니고 `/ai/` 로 301 만
 한다.
@@ -28,7 +28,7 @@ API 도 헬스체크도 그 밑이다. 도메인 루트는 어느 쪽의 것도 
 | | 화면 | API | 헬스체크 | 컨테이너 |
 |---|---|---|---|---|
 | ai-daily-web | `/ai/` | `/ai/api` | `/ai/health` | 127.0.0.1:8021 |
-| quantum-daily-web | `/quantum/` | `/quantum/api` | `/quantum/health` | 127.0.0.1:8023 |
+| quantum-weekly-web | `/quantum/` | `/quantum/api` | `/quantum/health` | 127.0.0.1:8023 |
 
 **백엔드 라우트 자체는 `/api` 그대로다.** 접두사는 컨테이너 nginx 가 붙였다 뗀다
 (`frontend/nginx.conf`). 그래서 `backend/tests/` 는 `/api/...` 로 요청하는 것이 맞고,
