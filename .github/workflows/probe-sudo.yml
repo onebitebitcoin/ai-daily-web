@@ -1,4 +1,4 @@
-# sudo 가 비밀번호 없이 되는지만 본다. 아무것도 바꾸지 않는다.
+# nginx 설정에 measly 가 쓸 수 있는 자리가 있는지만 본다. 아무것도 바꾸지 않는다.
 name: "Probe sudo"
 on:
   workflow_dispatch:
@@ -7,13 +7,21 @@ jobs:
     runs-on: [self-hosted, ai-daily-web]
     timeout-minutes: 5
     steps:
-      - name: "Check passwordless sudo"
+      - name: "Look for a writable include point"
         run: |
-          echo "--- passwordless check ---"
-          if sudo -n true 2>/dev/null; then echo "SUDO_OK"; else echo "SUDO_NEEDS_PASSWORD"; fi
-          echo "--- allowed commands ---"
-          sudo -n -l 2>&1 | head -20 || true
-          echo "--- vhost readable? ---"
-          ls -l /etc/nginx/sites-available/daily.onebitecoder.com 2>&1 || true
-          echo "--- locations in vhost ---"
-          grep -n 'location' /etc/nginx/sites-available/daily.onebitecoder.com 2>&1 | head -20 || true
+          echo "--- vhost 의 include ---"
+          grep -n 'include' /etc/nginx/sites-available/daily.onebitecoder.com || echo "(include 없음)"
+          echo "--- nginx.conf 의 include ---"
+          grep -n 'include' /etc/nginx/nginx.conf || true
+          echo "--- 후보 디렉토리 권한 ---"
+          for d in /etc/nginx /etc/nginx/conf.d /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets; do
+            if [ -d "$d" ]; then
+              perm=$(stat -c '%A %U:%G' "$d")
+              if [ -w "$d" ]; then w=WRITABLE; else w=readonly; fi
+              echo "$d  $perm  $w"
+            fi
+          done
+          echo "--- fee-upstream.conf (NOPASSWD tee 대상) ---"
+          ls -l /etc/nginx/fee-upstream.conf 2>&1 || true
+          echo "--- 443 server 블록 전문 ---"
+          sed -n '/listen 443/,/^}/p' /etc/nginx/sites-available/daily.onebitecoder.com
