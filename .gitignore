@@ -46,3 +46,16 @@ debug.log
 
 # launchd 무인 발행 로그
 /logs/
+
+# 검수용 스크린샷·카드 이미지. 발행 확인하다 보면 루트에 수십 장씩 쌓인다 —
+# 2026-09-20 에 115장(약 15MB)이 통째로 커밋돼 들어온 적이 있다(f5ae789).
+# 저장소 밖으로 내보내야 할 산출물이 아니므로 루트에서는 전부 무시한다.
+# 프론트 자산(frontend/public, frontend/src)과 reference/ 표본은 경로가 달라 영향 없다.
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+!/prod-cover.png
+
+# 스크립트 수정 전 백업본
+*.bak
