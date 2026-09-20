@@ -1,0 +1,126 @@
+# quantum-daily-web 을 같은 서버에 올리는 **일회성** 부트스트랩.
+#
+# 왜 이 저장소에 있는가: quantum-daily-web 에는 아직 self-hosted 러너가 없고,
+# 러너를 등록하려면 서버에서 명령을 돌려야 한다. 서버에 닿는 길이 이 저장소의
+# 러너(measly-ai-daily)뿐이라 여기에 얹었다. 등록이 끝나면 이 파일은 지운다.
+#
+# **이 워크플로는 /ai 를 건드리지 않는다.** 새 디렉토리·새 포트(8022)·새 컨테이너만
+# 만든다. 호스트 nginx 는 손대지 않는다 — 그건 add-quantum-nginx.yml 이 따로 한다.
+name: "Bootstrap quantum-daily-web"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bootstrap:
+    runs-on: [self-hosted, ai-daily-web]
+    timeout-minutes: 20
+    concurrency:
+      group: bootstrap-quantum-daily-web
+      cancel-in-progress: false
+
+    steps:
+      - name: "Clone or update /home/measly/quantum-daily-web"
+        run: |
+          set -euo pipefail
+          cd /home/measly
+          if [ -d quantum-daily-web/.git ]; then
+            cd quantum-daily-web
+            git fetch origin main
+            git reset --hard origin/main
+          else
+            git clone https://github.com/onebitebitcoin/quantum-daily-web.git
+            cd quantum-daily-web
+          fi
+          git log --oneline -1
+
+      - name: "Write .env"
+        env:
+          ADMIN_API_KEY: ${{ secrets.QUANTUM_ADMIN_API_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.QUANTUM_POSTGRES_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd /home/measly/quantum-daily-web
+          # 이미 있으면 덮어쓰지 않는다 — 볼륨 안의 DB 비밀번호와 어긋나면 기동이 깨진다.
+          if [ -f .env ]; then
+            echo ".env 가 이미 있다 — 그대로 둔다"
+          else
+            umask 077
+            cat > .env <<EOF
+          POSTGRES_USER=quantumdaily
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_DB=quantumdaily
+          DATABASE_URL=postgresql+psycopg2://quantumdaily:${POSTGRES_PASSWORD}@db:5432/quantumdaily
+          ADMIN_API_KEY=${ADMIN_API_KEY}
+          WEB_PORT=8022
+          DOMAIN=daily.onebitecoder.com
+          EOF
+            echo ".env 생성"
+          fi
+          # 값은 찍지 않고 키 이름만 확인한다
+          cut -d= -f1 .env
+
+      - name: "Build and start (port 8022)"
+        run: |
+          set -euo pipefail
+          cd /home/measly/quantum-daily-web
+          docker compose build backend web
+          docker compose up -d db backend web
+          docker compose ps
+
+      - name: "Verify container on 8022"
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8022/quantum/health || true)
+            [ "$code" = "200" ] && { echo "health 200"; break; }
+            [ "$i" = "30" ] && { echo "health 가 200 이 아니다: $code"; docker compose logs --tail 50 backend; exit 1; }
+            sleep 2
+          done
+
+          html=$(curl -fsS localhost:8022/quantum/)
+          assets=$(printf '%s' "$html" | grep -oE '/quantum/assets/[A-Za-z0-9_.-]+' | sort -u)
+          [ -n "$assets" ] || { echo "index.html 에서 자산 경로를 못 찾았다"; exit 1; }
+          for a in $assets; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "localhost:8022$a")
+            echo "$code  $a"
+            [ "$code" = "200" ] || exit 1
+          done
+
+          # /ai 가 멀쩡한지도 같이 본다. 이 워크플로는 8021 을 건드리지 않지만,
+          # 같은 서버라 자원 다툼으로 죽는 경우를 못 보고 지나치면 안 된다.
+          code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8021/ai/ || true)
+          echo "ai 컨테이너: $code"
+          [ "$code" = "200" ] || { echo "경고: /ai 컨테이너가 200 이 아니다"; exit 1; }
+
+      - name: "Register self-hosted runner for quantum-daily-web"
+        env:
+          RUNNER_TOKEN: ${{ secrets.QUANTUM_RUNNER_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd /home/measly
+          if [ -d actions-runner-quantum-daily/.runner ]; then
+            echo "러너가 이미 등록되어 있다"
+          else
+            mkdir -p actions-runner-quantum-daily
+            cd actions-runner-quantum-daily
+            # 이미 있는 ai 러너와 같은 버전을 쓴다 — 서버에 내려받은 tarball 을 재사용.
+            ver=$(cat /home/measly/actions-runner-ai-daily/.runner_version 2>/dev/null || echo "")
+            if [ -z "$ver" ]; then
+              ver=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest \
+                    | grep -oE '"tag_name": *"v[0-9.]+"' | grep -oE '[0-9.]+' | head -1)
+            fi
+            echo "runner version: $ver"
+            curl -fsSL -o runner.tar.gz \
+              "https://github.com/actions/runner/releases/download/v${ver}/actions-runner-linux-x64-${ver}.tar.gz"
+            tar xzf runner.tar.gz && rm runner.tar.gz
+            ./config.sh --unattended --replace \
+              --url https://github.com/onebitebitcoin/quantum-daily-web \
+              --token "$RUNNER_TOKEN" \
+              --name measly-quantum-daily \
+              --labels quantum-daily-web \
+              --work _work
+            sudo ./svc.sh install measly
+            sudo ./svc.sh start
+          fi
+          sudo ./svc.sh status || true
