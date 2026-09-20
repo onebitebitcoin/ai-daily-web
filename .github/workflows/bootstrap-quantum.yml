@@ -114,7 +114,9 @@ jobs:
         run: |
           set -euo pipefail
           cd /home/measly
-          if [ -d actions-runner-quantum-daily/.runner ]; then
+          # `.runner` 는 디렉토리가 아니라 파일이다 — -d 로 검사하면 이미 등록된
+          # 러너를 못 알아보고 config.sh 가 "already configured" 로 죽는다.
+          if [ -f actions-runner-quantum-daily/.runner ]; then
             echo "러너가 이미 등록되어 있다"
           else
             mkdir -p actions-runner-quantum-daily
