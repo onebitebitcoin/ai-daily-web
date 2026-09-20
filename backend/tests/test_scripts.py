@@ -1346,7 +1346,9 @@ def test_edition_scripts_default_to_this_projects_backend() -> None:
     assert push_edition.parse_args(["edition.json"]).api == "http://localhost:8003"
     assert recent_editions.parse_args([]).api == "http://localhost:8003"
 
-    assert collect_daily.DEFAULT_EDITION_API == "https://daily.onebitecoder.com"
+    # 이 도메인은 시리즈가 둘이라 API 가 서브패스 밑으로 갈려 있다. `/ai` 가 빠지면
+    # 루트의 레거시 통로로 들어가고, 그 통로는 전환 기간이 끝나면 사라진다.
+    assert collect_daily.DEFAULT_EDITION_API == "https://daily.onebitecoder.com/ai"
     assert "onebitebitcoin" not in collect_daily.DEFAULT_EDITION_API
 
 

@@ -8,10 +8,11 @@
 
 - [x] Phase 2: 컨테이너 nginx 와 OG 메타 접두사
 
+- [x] Phase 3: 발행·운영 스크립트와 배포 워크플로
+
 ## 현재 진행 중
-- [ ] Phase 3: 발행·운영 스크립트와 배포 워크플로
+- [ ] Phase 4: 호스트 vhost 를 세 갈래로
 
 ## 남은 Phase
-- [ ] Phase 4: 호스트 vhost 를 세 갈래로
 - [ ] Phase 5: 문서
 - [ ] Phase 6: 배포와 검증

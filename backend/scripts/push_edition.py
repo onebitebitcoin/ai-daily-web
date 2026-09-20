@@ -1,4 +1,4 @@
-"""Validate a finished edition JSON locally, then POST it to /api/editions.
+"""Validate a finished edition JSON locally, then POST it to {api}/api/editions.
 
 Local validation reuses the same pydantic schema the API enforces, so a bad
 field fails here with a clear message instead of round-tripping a 422. 그 뒤
@@ -33,8 +33,12 @@ from scripts.verify_edition import check_edition, print_report  # noqa: E402
 
 ENV_FILE = BACKEND_ROOT / ".env"
 # 이 프로젝트의 로컬 백엔드다. 8002 는 btc-daily-web 이라 그대로 두면 AI 에디션이
-# 남의 DB 로 들어간다. 도메인이 정해지면 collect_daily.DEFAULT_EDITION_API 와 함께
-# 프로덕션 주소로 바꾼다(CONTENT_CONTRACT.md "도메인이 정해지면" 절).
+# 남의 DB 로 들어간다.
+#
+# 프로덕션을 볼 때는 **서브패스까지 적는다** — `https://daily.onebitecoder.com/ai`.
+# 이 도메인은 카드뉴스 시리즈가 둘이라 API 가 `/ai/api` 와 `/quantum/api` 로 갈려
+# 있다. `/ai` 를 빼면 루트의 레거시 통로로 들어가고, 그 통로는 전환 기간이 끝나면
+# 사라진다. 로컬 주소에는 접두사가 없다 — 백엔드에 직통이기 때문이다.
 DEFAULT_API = "http://localhost:8003"
 
 

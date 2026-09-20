@@ -9,7 +9,10 @@ ROOT=/Users/nsw/meeting_room/lab/ai-daily-web
 # 발행 대상. 프로덕션이다 — 로컬 :8003 백엔드는 개발용이라 여기 적으면 사이트에
 # 아무것도 안 올라간다. push_edition.py 는 로컬 backend/.env 의 ADMIN_API_KEY 로
 # 인증하므로 그 값이 서버 .env 의 것과 같아야 한다(다르면 401).
-API=https://daily.onebitecoder.com
+#
+# 끝의 `/ai` 는 서브패스다. 이 도메인은 카드뉴스 시리즈가 둘이라 API 가 `/ai/api`
+# 와 `/quantum/api` 로 갈려 있고, 아래에서 이 값 뒤에 `/api/...` 를 이어 붙인다.
+API=https://daily.onebitecoder.com/ai
 LOG="$ROOT/logs/daily-cron-$(date +%F).log"
 mkdir -p "$ROOT/logs"
 

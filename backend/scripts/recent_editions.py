@@ -5,7 +5,7 @@ JSON을 통째로 읽으면 본문·Q&A까지 딸려와 컨텍스트만 잡아�
 `num / chip / title / 매체`만 남긴다. 어떤 카드가 같은 사건인지 묶는 판단은
 스크립트가 아니라 사람(Claude)이 SKILL.md 3.1의 기준으로 한다.
 
-Usage: python scripts/recent_editions.py --api https://daily.onebitecoder.com
+Usage: python scripts/recent_editions.py --api https://daily.onebitecoder.com/ai
        python scripts/recent_editions.py --days 10 --before 2026-08-07
 """
 
@@ -27,6 +27,11 @@ if str(BACKEND_ROOT) not in sys.path:
 KST = ZoneInfo("Asia/Seoul")
 # push_edition.py 와 같은 값이어야 한다 — 8002 는 btc-daily-web 이라, 그대로 두면
 # 중복 점검이 남의 발행 이력을 읽는다.
+#
+# 프로덕션을 볼 때는 **서브패스까지 적는다** — `https://daily.onebitecoder.com/ai`.
+# 이 도메인은 카드뉴스 시리즈가 둘이라 API 가 `/ai/api` 와 `/quantum/api` 로 갈려
+# 있다. `/ai` 를 빼면 루트의 레거시 통로로 들어가고, 그 통로는 전환 기간이 끝나면
+# 사라진다. 로컬 주소에는 접두사가 없다 — 백엔드에 직통이기 때문이다.
 DEFAULT_API = "http://localhost:8003"
 DEFAULT_DAYS = 7
 

@@ -105,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 15); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8021/health || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8021/ai/health || true)
             [ "$code" = "200" ] && break
             [ "$i" = "15" ] && { echo "health 가 200 이 아니다: $code"; exit 1; }
             sleep 2

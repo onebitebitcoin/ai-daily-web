@@ -67,7 +67,12 @@ DEFAULT_YOUTUBE_URL = "http://localhost:23456/api/queue?full=1"
 # 이력은 별개라, 로컬만 보면 어제 뭐가 나갔는지 모르고 같은 카드를 또 낸다.
 # 로컬 드라이런은 `--edition-api http://localhost:8003` 으로 덮어쓴다.
 # (발행처 자체는 push_edition.py 의 --api 다. 이 값과 다른 축이다.)
-DEFAULT_EDITION_API = "https://daily.onebitecoder.com"
+#
+# 주소에 `/ai` 가 붙어 있는 것은 오타가 아니다. 이 도메인은 카드뉴스 시리즈가
+# 둘이라 API 가 `/ai/api` 와 `/quantum/api` 로 갈려 있고, 스크립트는 이 값 뒤에
+# `/api/editions` 를 이어 붙인다. 로컬 주소에 접두사가 없는 것은 백엔드에
+# 직통이라 컨테이너 nginx 를 거치지 않기 때문이다.
+DEFAULT_EDITION_API = "https://daily.onebitecoder.com/ai"
 # 카드 후보 뉴스 창. 트렌딩 집계 창(24h)과 다르다 — 집계는 "그날 무슨 일이
 # 있었나"라서 하루로 잘라야 맞지만, 카드 후보는 고를 게 많을수록 좋다.
 # 영상 창(VIDEO_WINDOW_HOURS)이 이미 48h 인 것과 같은 취지다.

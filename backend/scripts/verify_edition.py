@@ -47,6 +47,10 @@ from scripts.collect_daily import (  # noqa: E402  (sys.path 조정 후여야 �
     hamming_distance,
 )
 
+# 프로덕션을 볼 때는 **서브패스까지 적는다** — `https://daily.onebitecoder.com/ai`.
+# 이 도메인은 카드뉴스 시리즈가 둘이라 API 가 `/ai/api` 와 `/quantum/api` 로 갈려
+# 있다. `/ai` 를 빼면 루트의 레거시 통로로 들어가고, 그 통로는 전환 기간이 끝나면
+# 사라진다. 로컬 주소에는 접두사가 없다 — 백엔드에 직통이기 때문이다.
 DEFAULT_API = "http://localhost:8003"
 # 매체가 봇을 막아 확인만 못 한 경우. 링크가 진짜 죽은 것과 구분해 WARN 으로 둔다.
 BLOCKED_STATUSES = frozenset({401, 403, 405, 429})

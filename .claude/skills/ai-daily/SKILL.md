@@ -33,7 +33,7 @@ description: 최근 24시간 my-news + my-youtube 데이터로 오늘자 AI 카�
 
 ```bash
 curl -s localhost:8003/health                          # 로컬 백엔드(리허설용)
-curl -s https://daily.onebitecoder.com/health           # 발행처
+curl -s https://daily.onebitecoder.com/ai/health        # 발행처
 curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/news?asset=ai&limit=1"
 curl -s -o /dev/null -w "%{http_code}" "http://localhost:23456/api/queue"
 ```
@@ -210,7 +210,7 @@ my-news가 주는 `image_url`은 후보 100건 중 41건에만 붙어 있었다 
 
 ```bash
 cd backend && source .venv/bin/activate && \
-python scripts/recent_editions.py --api https://daily.onebitecoder.com
+python scripts/recent_editions.py --api https://daily.onebitecoder.com/ai
 ```
 
 발행 이력이 하나도 없으면 이 스크립트는 `SystemExit`으로 "이전 발행분이 없다 —
@@ -479,12 +479,14 @@ cd backend && source .venv/bin/activate && python scripts/generate_qa.py ../draf
 
 ### 6. 발행
 
-발행처는 **프로덕션(`https://daily.onebitecoder.com`)이다.** 사이트는 `/ai`
-서브패스에서 서빙되지만 API 경로는 루트 그대로다 — `--api`에 `/ai`를 붙이지 마라.
+발행처는 **프로덕션(`https://daily.onebitecoder.com/ai`)이다.** `--api` 에 `/ai`
+까지 적어야 한다. 이 도메인은 카드뉴스 시리즈가 둘이라 API 가 `/ai/api` 와
+`/quantum/api` 로 갈려 있다. `/ai` 를 빼면 루트의 레거시 통로로 들어가는데, 그
+통로는 전환 기간이 끝나면 사라진다.
 
 ```bash
 cd backend && source .venv/bin/activate && \
-python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily.onebitecoder.com
+python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily.onebitecoder.com/ai
 ```
 
 리허설은 `--api http://localhost:8003`으로 로컬 백엔드에 쏜다. 로컬로 쏜 건
@@ -527,7 +529,7 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily
 ### 7. 검증 후 보고
 
 ```bash
-curl -s "https://daily.onebitecoder.com/api/editions/<date>" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['meta']); print(len(d['cards']), '장')"
+curl -s "https://daily.onebitecoder.com/ai/api/editions/<date>" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['meta']); print(len(d['cards']), '장')"
 python scripts/verify_edition.py --date <date>    # 발행된 것을 한 번 더 훑는다
 ```
 
@@ -537,7 +539,7 @@ python scripts/verify_edition.py --date <date>    # 발행된 것을 한 번 더
 
 #### 7.1. 기계가 못 보는 것 — 눈으로 확인할 셋
 
-**하나. 이미지 10장을 실제로 열어라.** URL 만 넣고 넘어가지 마라. `/api/img/<date>/<num>`
+**하나. 이미지 10장을 실제로 열어라.** URL 만 넣고 넘어가지 마라. `/ai/api/img/<date>/<num>`
 이 아니라 원본 주소를 열어 그림을 본다. 2026-08-26 실측으로 이런 것들이 그대로 나갔다.
 
 - **재탕 표지.** 코인텔레그래프 매거진의 `og:image`는 다른 기사("AGI가 우리를 죽이지
