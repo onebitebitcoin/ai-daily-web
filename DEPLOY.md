@@ -322,7 +322,11 @@ sudo ./svc.sh install measly && sudo ./svc.sh start
 | 전체 철수 | `docker compose down -v` + vhost 심볼릭 링크 제거 + `sudo certbot delete --cert-name daily.onebitecoder.com` |
 
 발행분 백업은 `deploy/backup.sh`가 `.env`의 `POSTGRES_USER`/`POSTGRES_DB`를 읽어
-`pg_dump`를 뜬다. 첫 발행 뒤 한 번 돌려 두는 게 좋다.
+`pg_dump`를 뜬다. 2026-09-21 부터 서버 `measly` crontab 에 **매일 04:35 KST** 로
+등록돼 있다(btc-daily-web 이 04:30 이라 5분 어긋나게 뒀다). 덤프는
+`~/backups/ai-daily/` 에 14일 보관되고 로그는 `~/.claude/logs/ai-daily-backup.log`
+에 쌓인다 — 실패 알림은 없으니 눈으로 본다. 대상·한계·복구 절차는
+[README.md 의 백업 / 복구](README.md#백업--복구) 에 정리돼 있다.
 
 ---
 

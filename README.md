@@ -135,23 +135,80 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily
 
 ## 백업 / 복구
 
-발행 데이터는 재생성이 불가능하다 — 수집 소스는 시간 창만 보여주고, 다시 못
-받는다. 일 1회 덤프하고 14일 보관한다.
+### 무엇을, 왜
 
-```bash
-bash deploy/backup.sh          # 수동 1회
+**발행 데이터는 재생성이 불가능하다.** 수집 소스(my-news·my-youtube)는 24시간 창만
+보여주고 지난 날짜를 다시 주지 않으며, 카드의 Q&A 는 유료 모델 호출 결과다. DB
+볼륨 하나에만 두지 않는다.
+
+| 대상 | 백업됨 | 유실되면 |
+|---|---|---|
+| `editions` — 발행분 본문·카드 10장·Q&A | O | 복구 불가. 맥의 `drafts/edition-*.json` 이 남아 있다면 재발행으로 되살릴 수 있다 |
+| `card_likes` — 좋아요 집계(2026-09-18~) | O | 집계가 0 으로 돌아간다 |
+| `alembic_version` | O | 복원본이 스키마 리비전을 그대로 들고 온다 |
+| `og_cache` · `img_cache` 도커 볼륨 | **X** | 원본 기사 이미지에서 다시 받아 재생성된다 — 첫 조회가 느려질 뿐이라 일부러 담지 않는다 |
+| 서버 `.env` | **X** | 비밀값이라 덤프에 담지 않는다. 유실 시 새로 쓰되 `ADMIN_API_KEY` 는 맥 `backend/.env` 의 값과 반드시 같게 맞춘다(아니면 발행이 401) |
+
+### 누가 언제 돌리나
+
+**호스트(리눅스 서버) `measly` 사용자의 crontab** 이다. 컨테이너 안도, 발행을 돌리는
+맥도 아니다.
+
+```cron
+35 4 * * * mkdir -p /home/measly/.claude/logs && /bin/bash /home/measly/ai-daily-web/deploy/backup.sh >> /home/measly/.claude/logs/ai-daily-backup.log 2>&1
 ```
 
-백업 파일은 `~/backups/ai-daily/ai-daily-<YYYY-MM-DD>.sql.gz`로 쌓인다
-(`AI_DAILY_BACKUP_DIR`로 위치를 바꿀 수 있다). btc-daily-web과 디렉토리·접두사가
-달라 두 프로젝트의 덤프가 서로를 덮어쓰지 않는다.
+- **매일 04:35 KST 1회.** 발행(06:00)보다 앞이라 오늘 덤프에는 어제까지의 발행분이 들어 있다.
+- 같은 서버의 btc-daily-web 이 **04:30** 에 같은 일을 한다. 5 분 어긋나게 둔 것은
+  의도다 — 같은 도커 데몬에 `pg_dump` 두 개가 동시에 붙지 않게 한다.
+- 스크립트는 `docker compose exec -T db pg_dump` 로 뜬다. **컨테이너가 내려가 있으면
+  그날치는 실패한다**(기존 백업을 덮어쓰지는 않는다).
 
-복구:
+### 어디에 쌓이나
+
+`~/backups/ai-daily/ai-daily-<YYYY-MM-DD>.sql.gz` · gzip · 권한 600 · **14일 보관**
+(15일째부터 스크립트가 지운다). `AI_DAILY_BACKUP_DIR` 로 위치를 바꿀 수 있다.
+btc-daily-web 은 `~/backups/btc-daily/` 에 `btc-daily-` 접두사로 쌓여 서로를 덮어쓰지
+않는다.
+
+안전장치는 스크립트 안에 있다 — 임시 파일에 받아 성공했을 때만 옮기고(부분 파일이
+정상 백업으로 남지 않게), `PIPESTATUS` 로 `pg_dump` 실패를 직접 확인하고(gzip 이
+0 을 뱉어도 속지 않게), 빈 덤프면 기존 파일을 건드리지 않는다.
+
+**한계: 같은 서버 같은 디스크다.** 디스크가 죽으면 DB 와 백업이 함께 사라진다.
+오프사이트 사본은 아직 없다.
+
+### 살아 있는지 확인
+
+**실패해도 아무도 알려주지 않는다.** 텔레그램 알림은 발행 파이프라인에만 붙어 있고
+백업에는 없다. 그래서 눈으로 확인한다.
 
 ```bash
+ls -lt ~/backups/ai-daily | head -3          # 맨 위가 오늘(또는 어제) 날짜여야 한다
+tail -5 ~/.claude/logs/ai-daily-backup.log   # 마지막 줄이 OK 여야 한다
+crontab -l | grep ai-daily-web               # 등록이 살아 있는지
+bash deploy/backup.sh                        # 수동 1회 — 같은 날 재실행은 덮어쓴다
+```
+
+정상 로그 한 줄은 이렇게 생겼다:
+
+```
+2026-09-21T00:16:40+09:00 OK: /home/measly/backups/ai-daily/ai-daily-2026-09-21.sql.gz (404K)
+```
+
+### 복구
+
+```bash
+cd /home/measly/ai-daily-web
+set -a; . ./.env; set +a
 gunzip -c ~/backups/ai-daily/ai-daily-<YYYY-MM-DD>.sql.gz \
   | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
+
+덤프는 평범한 `pg_dump` 출력이라 `DROP` 이 앞에 붙지 않는다 — **비어 있는 DB 에
+붓는 것을 전제로 한다.** 테이블이 남아 있는 상태로 부으면 충돌한다. 통째로 되돌릴
+때는 `docker compose down -v` 로 볼륨을 비우고 `up -d` 로 다시 만든 뒤 붓는다
+(컨테이너 기동 시 `alembic upgrade head` 가 먼저 돌아 스키마가 생긴다).
 
 ## 트러블슈팅
 
