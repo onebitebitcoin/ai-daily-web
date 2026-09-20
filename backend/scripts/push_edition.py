@@ -161,6 +161,61 @@ def check_links_and_images(client: httpx.Client, body: dict[str, Any]) -> None:
         )
 
 
+def verify_published_images(client: httpx.Client, api: str, body: dict[str, Any]) -> None:
+    """발행 직후 **실제로 서비스되는 이미지 프록시**(`/api/img/{date}/{num}`)를
+    하나씩 두드려 200 이 오는지 확인한다.
+
+    `check_links_and_images`(verify_edition)는 push **전**에 원본 매체 URL 만
+    본다. 원본이 살아 있어도 이 서버의 `imgproxy.fetch_source` 가 그 원본에서
+    막힐 수 있다 — 2026-09-21 실측: btc-daily-web 에서 live.staticflickr.com 이
+    httpx 기본 User-Agent 를 차단해 프록시가 502 를 냈는데, verify_edition 은
+    브라우저 UA 로 원본을 확인하므로 이 차이를 못 잡았다. 그리고 push 전에는
+    이 날짜 에디션이 서버에 아직 없어 프록시 경로 자체가 404 이므로, 반드시
+    push **뒤에** 실제 서빙 경로를 두드려야 한다.
+
+    문제가 있어도 발행을 되돌리지는 않는다(POST 는 이미 끝났다) — 대신 non-zero
+    exit 으로 끝내 daily-cron.sh 의 실패 알림을 그대로 태운다. 사람이 media 를
+    다른 그림으로 바꿔 재발행해야 한다.
+    """
+    date = body["meta"]["date"]
+    problems: list[str] = []
+    checked = 0
+    for card in body.get("cards", []):
+        media = card.get("media")
+        image = (media or {}).get("image") or ""
+        # 번들 asset stem(레퍼런스 fixture 가 쓰는 'fed-macro' 같은 것)은 프록시를
+        # 거치지 않고 프론트가 그대로 쓴다 — imgproxy.resolve_card_image_url 과
+        # 같은 조건이다. 원격 URL 이 아니면 확인할 프록시 경로 자체가 없다.
+        if not image.startswith("http"):
+            continue
+        num = card["num"]
+        checked += 1
+        url = f"{api}/api/img/{date}/{num}?w=800"
+        try:
+            response = client.get(url, timeout=20.0)
+        except httpx.HTTPError as exc:
+            problems.append(f"[{num:02d}] 이미지 프록시 확인 불가({type(exc).__name__}): {url}")
+            continue
+        if response.is_error:
+            problems.append(
+                f"[{num:02d}] 이미지 프록시가 {response.status_code} 를 준다"
+                f"(카드 이미지가 브라우저에서 깨져 보인다): {url}"
+            )
+        elif not response.headers.get("content-type", "").startswith("image/"):
+            problems.append(
+                f"[{num:02d}] 이미지 프록시가 이미지가 아닌 걸 준다"
+                f"({response.headers.get('content-type')}): {url}"
+            )
+    if problems:
+        joined = "\n".join(f"  - {p}" for p in problems)
+        raise SystemExit(
+            f"발행 후 이미지 프록시 확인 실패 — 발행은 이미 됐지만 카드 이미지가 깨져 "
+            f"보인다 ({len(problems)}/{checked}건). media 를 다른 그림으로 바꿔 "
+            f"재발행해라:\n{joined}"
+        )
+    print(f"발행 후 이미지 프록시 확인: {checked}장 전부 정상")
+
+
 def push(client: httpx.Client, api: str, api_key: str, body: dict[str, Any]) -> dict[str, Any]:
     response = client.post(
         f"{api}/api/editions",
@@ -209,6 +264,7 @@ def main(argv: list[str] | None = None, client: httpx.Client | None = None) -> d
         else:
             check_links_and_images(client, body)
         result = push(client, args.api, api_key, body)
+        verify_published_images(client, args.api, result)
     finally:
         if owns_client:
             client.close()
