@@ -1,0 +1,19 @@
+# sudo 가 비밀번호 없이 되는지만 본다. 아무것도 바꾸지 않는다.
+name: "Probe sudo"
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: [self-hosted, ai-daily-web]
+    timeout-minutes: 5
+    steps:
+      - name: "Check passwordless sudo"
+        run: |
+          echo "--- passwordless check ---"
+          if sudo -n true 2>/dev/null; then echo "SUDO_OK"; else echo "SUDO_NEEDS_PASSWORD"; fi
+          echo "--- allowed commands ---"
+          sudo -n -l 2>&1 | head -20 || true
+          echo "--- vhost readable? ---"
+          ls -l /etc/nginx/sites-available/daily.onebitecoder.com 2>&1 || true
+          echo "--- locations in vhost ---"
+          grep -n 'location' /etc/nginx/sites-available/daily.onebitecoder.com 2>&1 | head -20 || true
