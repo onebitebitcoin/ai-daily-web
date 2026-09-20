@@ -1,6 +1,6 @@
 # CONTENT_CONTRACT — 에디션 JSON 계약
 
-`ai-daily-web`이 `POST /api/editions`로 받는 JSON의 실제 계약이다. `btc-daily-web`을
+`ai-daily-web`이 `POST /ai/api/editions`로 받는 JSON의 실제 계약이다. `btc-daily-web`을
 포크해 만든 프로젝트라 구조는 같고, 도메인 용어집·인용구 풀·후보 클러스터링만
 다르다. 원본 카드뉴스 템플릿 문서(`reference/template-field-reference.md`)를
 베이스로 하되, 이 프로젝트의 `backend/app/schemas.py`(pydantic, `extra="forbid"`)가
@@ -9,14 +9,14 @@
 
 ## 1. 필드 표 (실제 스키마 기준)
 
-전 모델이 `extra="forbid"`다 — 표에 없는 키를 보내면 `POST /api/editions`가
+전 모델이 `extra="forbid"`다 — 표에 없는 키를 보내면 `POST /ai/api/editions`가
 422를 반환한다. 오타 하나로 조용히 무시되는 필드는 없다.
 
 | 블록 | 필드 | 타입 | 필수 | 비고 |
 |---|---|---|---|---|
 | `meta` | `title` | str | ✓ | `<title>` |
 | | `slug` | str | ✓ | 출력용 식별자 |
-| | `date` | str(`YYYY-MM-DD`) | ✓ | **템플릿 원본에 없던 필드 — 라우팅 키(`GET /api/editions/{date}`)로 신규 추가됨** |
+| | `date` | str(`YYYY-MM-DD`) | ✓ | **템플릿 원본에 없던 필드 — 라우팅 키(`GET /ai/api/editions/{date}`)로 신규 추가됨** |
 | `theme` | `bg`,`bg2`,`bg_light`,`bg2_light`,`paper`,`paper2`,`ink`,`ink_dim`,`accent`,`accent_strong`,`glow`,`accent2`,`accent2_light`,`line`,`chip_bg`,`seg_off` | str | ✓ (16개 전부) | 템플릿 문서는 "4~6쌍"이라 썼지만 실제 스키마는 **16개 키 전부 필수** — 하나라도 빠지면 422 |
 | `brand` | — | str | ✓ | 좌상단 라벨 |
 | `cover` | `eyebrow` | str | ✓ | |
@@ -217,7 +217,8 @@ python scripts/push_edition.py drafts/edition-<date>.json --api http://localhost
    로 끌 수 있다 — 바깥 네트워크에 의존하기 때문이고, 네트워크가 없는 자리에서만
    쓴다.
 5. `backend/.env`(절대경로로 탐색)에서 `ADMIN_API_KEY` 로드. 없으면 실패.
-6. `POST {api}/api/editions`.
+6. `POST {api}/api/editions`. `{api}` 가 프로덕션이면 서브패스까지 포함한다
+   (`https://daily.onebitecoder.com/ai`) — 최종 주소는 `/ai/api/editions` 다.
 
 > 게이트는 표에 적힌 것만 잡는다. 오역이나 어색한 음차처럼 판단이 필요한 문제는
 > 걸러내지 못하므로, 새 사례가 나오면 고친 뒤 2.2절 표에 한 줄 추가한다.
@@ -228,13 +229,16 @@ python scripts/push_edition.py drafts/edition-<date>.json --api http://localhost
 문구작성은 개발 머신에서 하고, 완성된 에디션만 프로덕션으로 POST한다:
 
 ```bash
-python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily.onebitecoder.com
+python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily.onebitecoder.com/ai
 ```
 
 - `backend/.env`의 `ADMIN_API_KEY`로 인증한다. **서버 `.env`의 값과 같아야 한다** —
   다르면 401이고, 게이트를 다 통과한 뒤 마지막 POST에서만 드러난다.
 - 같은 `meta.date`로 다시 보내면 upsert다 — 오타 수정 후 재발행이 안전하다.
-- 발행 확인: `curl -s https://daily.onebitecoder.com/api/editions`
+- 발행 확인: `curl -s https://daily.onebitecoder.com/ai/api/editions`
+- `--api` 에서 `/ai` 를 빼지 마라. 이 도메인은 시리즈가 둘이라 API 가
+  `/ai/api` 와 `/quantum/api` 로 갈려 있고, 루트의 옛 경로는 전환 기간이
+  끝나면 사라진다.
 - 리허설은 `--api http://localhost:8003`으로 로컬 백엔드에 쏜다.
 
 ### 발행처와 이력 조회처는 다른 축이다
@@ -256,7 +260,7 @@ python scripts/push_edition.py ../drafts/edition-<date>.json --api https://daily
 stem(`frontend/src/assets/media/`에 실물 파일 존재). 자동 발행 파이프라인
 (`scripts/collect_daily.py` → 이 계약)은 **원본 썸네일 URL을 그대로 쓴다** —
 발행 시점에는 다운로드/재호스팅을 하지 않는다. 대신 프론트가 절대 URL을
-`/api/img/{date}/{num}` 프록시로 돌려 WebP로 줄여 받는다(원본 평균 380KB →
+`/ai/api/img/{date}/{num}` 프록시로 돌려 WebP로 줄여 받는다(원본 평균 380KB →
 약 35KB). 계약에는 원본 URL을 그대로 넣으면 된다:
 - 뉴스: 후보의 `image_url` 그대로.
 - 유튜브: `https://i.ytimg.com/vi/{video_id}/hqdefault.jpg`.

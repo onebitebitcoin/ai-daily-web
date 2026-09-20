@@ -17,14 +17,14 @@
 
 | 경로 | 내용 |
 |---|---|
-| `backend/` | FastAPI + SQLAlchemy + Alembic. 엔드포인트 5개(`/health`, 목록/단건/latest/POST) + OG 미리보기용 3개(`/api/og/{date}`, `/api/og/latest`, `/api/og/{date}/image.jpg`) + 이미지 프록시 1개(`/api/img/{date}/{num}`) |
+| `backend/` | FastAPI + SQLAlchemy + Alembic. 엔드포인트 5개(`/health`, 목록/단건/latest/POST) + OG 미리보기용 3개(`/api/og/{date}`, `/api/og/latest`, `/api/og/{date}/image.jpg`) + 이미지 프록시 1개(`/api/img/{date}/{num}`). **라우트는 `/api` 그대로이고, 밖에서는 `/ai/api` 로 보인다** — 접두사는 컨테이너 nginx 가 붙였다 뗀다 |
 | `backend/scripts/` | 수집·발행 스크립트(앱 코드 아님). 도메인 용어집·클러스터링은 `collect_daily.py`에 있다 |
 | `frontend/` | React + Vite + Tailwind. 세로 스냅 피드(`ShortsFeed`), 스타일은 `feed.css`·`chrome.css` |
 | `deploy/` | 호스트 nginx vhost, DB 백업 스크립트 |
 | `reference/` | 원본 카드뉴스 템플릿과 스키마 테스트용 표본. `btc-daily-web` 시절 그대로라 브랜드가 `BTC DAILY`다 — 발행물과 무관하다(`CLAUDE.md` 참고) |
 
 콘텐츠는 이 저장소가 만들지 않는다 — 다른 Claude 세션이 `/ai-daily` 스킬로 만들어
-`POST /api/editions`로 밀어 넣는다.
+`POST /ai/api/editions`로 밀어 넣는다.
 
 ## 로컬 개발
 
@@ -49,7 +49,7 @@ cd frontend && npm run lint && npm run test && npm run build
 ## 배포 (자체 VPS + Docker Compose)
 
 서비스 3개: `db`(Postgres 16) · `backend`(uvicorn, 기동 시 `alembic upgrade head`) ·
-`web`(nginx가 `dist`를 서빙 + `/api` → backend 프록시 + SPA fallback).
+`web`(nginx가 `dist`를 서빙 + `/ai/api` → 접두사를 떼고 backend 프록시 + SPA fallback).
 
 `/`, `/d/{date}`는 User-Agent가 SNS 미리보기 봇(Twitterbot, Slackbot, KakaoTalk 등,
 `frontend/nginx.conf`의 `is_social_bot` 목록)일 때만 백엔드가 렌더링한 OG 메타 HTML로

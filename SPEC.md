@@ -54,9 +54,13 @@ DB 키와 반드시 일치) 하나만 추가.
 
 ## 백엔드 API
 
+아래는 **백엔드가 직접 받는 경로**다. 밖에서는 앞에 `/ai` 가 붙어
+(`/ai/api/editions`) 보이며, 접두사는 컨테이너 nginx 가 떼고 넘긴다. 한 도메인에
+카드뉴스 시리즈가 둘이라(`/ai` 와 `/quantum`) 각자 서브패스 아래를 소유한다.
+
 | 메서드/경로 | 인증 | 설명 |
 |---|---|---|
-| `GET /health` | 없음 | 헬스체크 |
+| `GET /health` | 없음 | 헬스체크 (밖에서는 `/ai/health`) |
 | `GET /api/editions` | 없음 | 목록 `[{date, slug, title}]` (content 제외, 날짜 스트립용, 오름차순) |
 | `GET /api/editions/latest` | 없음 | 가장 최근 날짜의 전체 편집본 (`GET /api/editions/{date}`와 동일 응답 모양) |
 | `GET /api/editions/{date}` | 없음 | 그 날짜의 전체 `content` JSON. 없으면 404 |
@@ -100,9 +104,10 @@ DB 키와 반드시 일치) 하나만 추가.
 - `postgres` (named volume, healthcheck)
 - `backend` (uvicorn, 컨테이너 시작 시 `alembic upgrade head`)
 - `frontend` (멀티스테이지: `vite build` → 정적 파일만 남김)
-- `nginx` (frontend 정적 서빙 + `/api/*` → backend 리버스프록시 + SPA fallback.
-  카드뉴스는 `/ai` 서브패스에 있고 루트 `/`는 `/ai/`로 301한다. TLS는 이 컨테이너가
-  아니라 **호스트 nginx**가 종단한다 — `deploy/nginx/daily.onebitecoder.com.conf`)
+- `nginx` (frontend 정적 서빙 + `/ai/api/*` → 접두사를 떼고 backend 리버스프록시 +
+  SPA fallback. 화면도 API 도 `/ai` 서브패스 아래에 있고, 루트 `/`는 호스트 nginx 가
+  `/ai/`로 301한다. TLS는 이 컨테이너가 아니라 **호스트 nginx**가 종단한다 —
+  `deploy/nginx/daily.onebitecoder.com.conf` 가 `/ai`(8021)와 `/quantum`(8023)을 나눈다)
 
 WebSocket/SSE 없음 — 데일리 데이터지 실시간이 아니다. 필요해지면 그때 추가.
 

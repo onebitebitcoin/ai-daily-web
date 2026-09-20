@@ -118,8 +118,8 @@ backend는 기동하면서 `alembic upgrade head`를 돌린다. 마이그레이�
 **확인**
 
 ```bash
-curl -s localhost:8021/health                    # {"status":"ok"}
-curl -s localhost:8021/api/editions              # [] (아직 발행 전이라 빈 배열)
+curl -s localhost:8021/ai/health                 # {"status":"ok"}
+curl -s localhost:8021/ai/api/editions           # [] (아직 발행 전이라 빈 배열)
 curl -sI localhost:8021/ | grep -iE '^(HTTP|location)'
 #   → HTTP/1.1 301 / Location: /ai/
 #   Location 이 `/ai/` 상대 경로여야 한다. `http://…/ai/` 절대 URL 이면
@@ -195,8 +195,10 @@ sudo nginx -t && sudo systemctl reload nginx
 ```bash
 curl -sIL https://daily.onebitecoder.com/ | grep -iE '^(HTTP|location)'
 #   → 301, Location: /ai/  그리고 200. 중간에 http:// 가 끼면 안 된다
-curl -s  https://daily.onebitecoder.com/health            # {"status":"ok"}
-curl -s  https://daily.onebitecoder.com/api/editions      # []
+curl -s  https://daily.onebitecoder.com/ai/health         # {"status":"ok"}
+curl -s  https://daily.onebitecoder.com/ai/api/editions   # []
+curl -s -o /dev/null -w "quantum %{http_code}\n" \
+         https://daily.onebitecoder.com/quantum/          # 200 — 같은 vhost 의 다른 시리즈
 for p in $(curl -s https://daily.onebitecoder.com/ai/ | grep -o '/ai/assets/[^"]*'); do
   printf "%s -> " "$p"
   curl -s -o /dev/null -w "%{http_code}\n" "https://daily.onebitecoder.com$p"
@@ -295,7 +297,7 @@ gh run list --repo onebitebitcoin/ai-daily-web --limit 5
 
 ```bash
 cd /home/measly/ai-daily-web && git pull && docker compose up -d --build
-curl -s localhost:8021/health
+curl -s localhost:8021/ai/health
 ```
 
 ### 러너를 다시 붙일 때

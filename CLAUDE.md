@@ -14,8 +14,33 @@
 | 표지 인용구 | 오스트리아학파 경제학자 | **AI·컴퓨팅 인물** (`ai_quotes.json`) |
 | 매체 간 중복 | 없음 (매체 11곳이라 불필요) | **`cluster_events` 필수** (매체 54곳) |
 | 배포 | daily.onebitebitcoin.com | **daily.onebitecoder.com/ai** (서브패스) |
+| API 경로 | 루트 `/api` | **`/ai/api`** (한 도메인에 시리즈가 둘) |
 
 두 저장소는 완전히 독립이다. 한쪽 수정이 다른 쪽에 자동으로 반영되지 않는다.
+
+## 한 도메인, 두 시리즈 (MANDATORY)
+
+`daily.onebitecoder.com` 에는 이 저장소(`/ai`)와 `quantum-daily-web`(`/quantum`)이
+함께 올라가 있다. **각 시리즈가 자기 서브패스 아래를 통째로 소유한다** — 화면도
+API 도 헬스체크도 그 밑이다. 도메인 루트는 어느 쪽의 것도 아니고 `/ai/` 로 301 만
+한다.
+
+| | 화면 | API | 헬스체크 | 컨테이너 |
+|---|---|---|---|---|
+| ai-daily-web | `/ai/` | `/ai/api` | `/ai/health` | 127.0.0.1:8021 |
+| quantum-daily-web | `/quantum/` | `/quantum/api` | `/quantum/health` | 127.0.0.1:8023 |
+
+**백엔드 라우트 자체는 `/api` 그대로다.** 접두사는 컨테이너 nginx 가 붙였다 뗀다
+(`frontend/nginx.conf`). 그래서 `backend/tests/` 는 `/api/...` 로 요청하는 것이 맞고,
+밖으로 나가는 절대 URL 을 만드는 곳(`backend/app/og.py` 의 `SUBPATH`)만 접두사를 쓴다.
+
+**발행할 때 `--api` 에 `/ai` 를 빼지 마라.** `https://daily.onebitecoder.com/ai` 가
+기준 주소이고, 스크립트가 그 뒤에 `/api/editions` 를 이어 붙인다. 루트 `/api` 는
+2026-09-21 이전 공유 링크의 og:image 때문에 전환 기간 동안만 살아 있다.
+
+호스트 nginx 의 vhost 파일은 **이 저장소가 소유한다**
+(`deploy/nginx/daily.onebitecoder.com.conf`). quantum 쪽은 사본을 들지 않는다 —
+두 저장소가 각자 들고 있으면 한쪽 배포가 다른 쪽을 지운다.
 
 ## 용어 규칙 (MANDATORY)
 
