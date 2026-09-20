@@ -20,6 +20,17 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      # 8022 가 이미 쓰이고 있었다(2026-09-20 첫 시도). 어떤 포트가 비었는지
+      # 먼저 보고 고른다 — 남의 서비스를 밀어내지 않으려면 이 단계가 필요하다.
+      - name: "Show port usage (8018-8032)"
+        run: |
+          set -euo pipefail
+          echo "--- 루프백에 물린 포트 ---"
+          (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) \
+            | grep -E ':(80(1[89]|2[0-9]|3[0-2]))\b' || echo "(해당 범위 없음)"
+          echo "--- docker 포트 매핑 ---"
+          docker ps --format '{{.Names}}\t{{.Ports}}' | grep -E '80[0-9][0-9]' || echo "(없음)"
+
       - name: "Clone or update /home/measly/quantum-daily-web"
         run: |
           set -euo pipefail
