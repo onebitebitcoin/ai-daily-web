@@ -35,7 +35,7 @@ describe('EditionPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) =>
-        url === '/api/editions' ? Promise.resolve(mockResponse([])) : editionResponse,
+        url === '/ai/api/editions' ? Promise.resolve(mockResponse([])) : editionResponse,
       ),
     );
 
@@ -52,7 +52,7 @@ describe('EditionPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) =>
-        Promise.resolve(url === '/api/editions' ? mockResponse([]) : mockResponse(null, 404)),
+        Promise.resolve(url === '/ai/api/editions' ? mockResponse([]) : mockResponse(null, 404)),
       ),
     );
 
@@ -73,7 +73,7 @@ describe('EditionPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) =>
-        Promise.resolve(url === '/api/editions' ? mockResponse([]) : mockResponse(content)),
+        Promise.resolve(url === '/ai/api/editions' ? mockResponse([]) : mockResponse(content)),
       ),
     );
 
@@ -113,7 +113,7 @@ describe('LatestFeed', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) =>
-        Promise.resolve(url === '/api/editions' ? mockResponse(list) : mockResponse(content)),
+        Promise.resolve(url === '/ai/api/editions' ? mockResponse(list) : mockResponse(content)),
       ),
     );
 
@@ -130,7 +130,7 @@ describe('LatestFeed', () => {
       vi.fn((url: string) => {
         calls.push(url);
         return Promise.resolve(
-          url === '/api/editions'
+          url === '/ai/api/editions'
             ? mockResponse([{ date: content.meta.date, slug: 'b', title: 'b' }])
             : mockResponse(content),
         );
@@ -140,7 +140,7 @@ describe('LatestFeed', () => {
     renderLatestFeed();
 
     await screen.findByText(content.cover.eyebrow);
-    expect(calls).not.toContain('/api/editions/latest');
+    expect(calls).not.toContain('/ai/api/editions/latest');
   });
 
   it('surfaces a network failure instead of hanging on the loading state', async () => {

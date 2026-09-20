@@ -39,14 +39,14 @@ describe('cardImageSrc', () => {
   it('routes remote CDN images through the resizing proxy', () => {
     const src = cardImageSrc('2026-08-04', 3, 'https://cdn.example/huge.jpg', bundled);
 
-    expect(src).toBe('/api/img/2026-08-04/3?w=800');
+    expect(src).toBe('/ai/api/img/2026-08-04/3?w=800');
   });
 
   it('asks the proxy for a narrower image under Save-Data', () => {
     stubSaveData(true);
 
     expect(cardImageSrc('2026-08-04', 3, 'https://cdn.example/huge.jpg', bundled)).toBe(
-      '/api/img/2026-08-04/3?w=480',
+      '/ai/api/img/2026-08-04/3?w=480',
     );
   });
 

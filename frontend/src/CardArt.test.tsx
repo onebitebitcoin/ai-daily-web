@@ -154,6 +154,6 @@ describe('CardArt 대체 아트', () => {
     const { container } = render(<CardArt card={card} date={DATE} media={{}} shouldLoad />);
 
     expect(container.querySelector('.art-type')).toBeNull();
-    expect(container.querySelector('img')?.getAttribute('src')).toContain('/api/img/2026-08-05/4');
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('/ai/api/img/2026-08-05/4');
   });
 });

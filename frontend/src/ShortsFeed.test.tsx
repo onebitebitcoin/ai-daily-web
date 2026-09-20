@@ -51,14 +51,14 @@ function stubApi() {
   vi.stubGlobal(
     'fetch',
     vi.fn((path: string) => {
-      if (path === '/api/editions') {
+      if (path === '/ai/api/editions') {
         return Promise.resolve({
           ok: true,
           status: 200,
           json: () => Promise.resolve(DATES.map((d) => ({ date: d, slug: d, title: d }))),
         } as Response);
       }
-      const date = path.replace('/api/editions/', '');
+      const date = path.replace('/ai/api/editions/', '');
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -93,14 +93,14 @@ function stubApiWithTrending() {
   vi.stubGlobal(
     'fetch',
     vi.fn((path: string) => {
-      if (path === '/api/editions') {
+      if (path === '/ai/api/editions') {
         return Promise.resolve({
           ok: true,
           status: 200,
           json: () => Promise.resolve(DATES.map((d) => ({ date: d, slug: d, title: d }))),
         } as Response);
       }
-      const date = path.replace('/api/editions/', '');
+      const date = path.replace('/ai/api/editions/', '');
       return Promise.resolve({
         ok: true,
         status: 200,
