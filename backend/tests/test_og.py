@@ -107,7 +107,7 @@ def test_og_html_contains_meta_tags(client) -> None:
     assert 'property="og:title" content="비트코인 하이라이트' in body
     assert '데일리 AI" />' in body
     assert 'property="og:description"' in body
-    assert 'property="og:image" content="http://testserver/api/og/2026-07-30/image.jpg"' in body
+    assert 'property="og:image" content="http://testserver/ai/api/og/2026-07-30/image.jpg"' in body
     assert 'property="og:url" content="http://testserver/ai/d/2026-07-30"' in body
 
 

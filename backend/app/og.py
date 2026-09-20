@@ -108,6 +108,10 @@ def build_og_description(
     return text[:max_len].rstrip() + "…"
 
 
+# 이 시리즈가 서빙되는 서브패스. `frontend/vite.config.ts` 의 base 와 짝이다.
+SUBPATH = "/ai"
+
+
 def _request_origin(request: Request) -> str:
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("host", request.url.netloc)
@@ -128,13 +132,18 @@ def render_og_html(
 
     title = html.escape(f"{headline} · 데일리 AI")
     description = html.escape(build_og_description(content, card_index=card_index))
+    # 이 도메인은 시리즈가 둘이라 API 가 `/ai/api` 로 물러나 있다(frontend/nginx.conf).
+    # 백엔드 라우트 자체는 `/api` 그대로고, 접두사는 컨테이너 nginx 가 붙였다 뗀다 —
+    # 여기서 만드는 것은 밖으로 나가는 절대 URL 이므로 접두사가 있어야 한다.
     image_path = (
-        f"/api/og/{date_iso}/image.jpg"
+        f"{SUBPATH}/api/og/{date_iso}/image.jpg"
         if card is None
-        else f"/api/og/{date_iso}/{card_index}/image.jpg"
+        else f"{SUBPATH}/api/og/{date_iso}/{card_index}/image.jpg"
     )
     image_url = html.escape(f"{origin}{image_path}")
-    page_path = f"/ai/d/{date_iso}" if card is None else f"/ai/d/{date_iso}/{card_index}"
+    page_path = (
+        f"{SUBPATH}/d/{date_iso}" if card is None else f"{SUBPATH}/d/{date_iso}/{card_index}"
+    )
     page_url = html.escape(f"{origin}{page_path}")
 
     return f"""<!doctype html>
