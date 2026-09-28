@@ -1,11 +1,11 @@
 ---
 name: ai-daily
-description: 최근 24시간 my-news + my-youtube 데이터로 오늘자 AI 카드뉴스 10장을 만들어 ai-daily-web에 발행한다. "ai daily", "오늘 AI 카드뉴스", "AI 카드뉴스 발행" 키워드로 트리거.
+description: 최근 24시간 my-news + my-youtube 데이터로 오늘자 AI 카드뉴스 10장에 활용팁 카드 1장을 더해 ai-daily-web에 발행한다. "ai daily", "오늘 AI 카드뉴스", "AI 카드뉴스 발행" 키워드로 트리거.
 ---
 
 # ai-daily — 오늘자 AI 카드뉴스 발행
 
-명령 하나로 수집 → 카드 10장 작성 → 발행까지 끝낸다.
+명령 하나로 수집 → 카드 10장 작성 → 활용팁 카드 추가 → 발행까지 끝낸다.
 **문구를 쓰는 주체는 너(Claude)다.** 스크립트는 결정론적인 수집/조립/검증/발행만 한다.
 
 `btc-daily-web`의 같은 스킬에서 갈라져 나왔다. 파이프라인 구조(수집 → 후보 선별 →
@@ -32,14 +32,17 @@ description: 최근 24시간 my-news + my-youtube 데이터로 오늘자 AI 카�
 ### 1. 사전 확인
 
 ```bash
-curl -s localhost:8003/health                          # 로컬 백엔드(리허설용)
-curl -s https://daily.onebitecoder.com/ai/health        # 발행처
-curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/api/news?asset=ai&limit=1"
-curl -s -o /dev/null -w "%{http_code}" "http://localhost:23456/api/queue"
+curl -s -m 10 https://daily.onebitecoder.com/ai/health        # 발행처
+curl -s -m 10 -o /dev/null -w "%{http_code}" "http://localhost:8000/api/news?asset=ai&limit=1"
+curl -s -m 10 -o /dev/null -w "%{http_code}" "http://localhost:23456/api/queue"
 ```
 
-백엔드가 안 떠 있으면 `bash scripts/dev.sh backend`로 띄운다(내부적으로
-`uvicorn app.main:app --port 8003 --reload`를 돌린다).
+curl에는 반드시 `-m`을 붙인다. 멈춘 서버에 타임아웃 없이 붙으면 셸 타임아웃(120초)까지 그대로 묶인다.
+
+로컬 백엔드(8003)는 리허설(`--api` 생략)용이다. 프로덕션 발행은 스크립트마다
+`--api https://daily.onebitecoder.com/ai`로 직접 가므로 **8003을 확인하거나 재시작하지 않는다.**
+2026-09-29 무인 발행에서 멈춘 8003을 확인·재시작하느라 6분을 허비했다. 리허설할 때만
+`bash scripts/dev.sh backend`로 띄운다(내부적으로 `uvicorn app.main:app --port 8003 --reload`).
 
 소스(8000/23456)가 죽어 있으면 **거기서 멈추고 사용자에게 알린다** — 더미 데이터로 대체 금지.
 
@@ -266,6 +269,47 @@ python scripts/recent_editions.py --api https://daily.onebitecoder.com/ai
 표지 인용구 중복 회피(`ai_quotes.json` 28개 로테이션)도 같은 발행 이력 API를
 본다. 이력이 비어 있는 동안은 `collect_daily.py`가 날짜 기반 로테이션으로
 자동 폴백하니 이 단계에서 따로 신경 쓸 것은 없다.
+
+### 3.2. 활용팁 카드 추가 (11번째 카드) — **필수 단계**
+
+뉴스 10장과 별개로, 클로드 코드·코덱스 사용자에게 도움이 될 **지금 실제로 화제인**
+활용법이나 신규 기능 하나를 마지막 카드로 더한다. `num: 11`로 붙이고, 4절의 톤
+규칙을 그대로 따른다.
+
+**"지금 화제"의 기준.** 오래전부터 알려진 기본 사용법(CLAUDE.md 작성법, hooks
+설정, TDD 결합처럼 어느 가이드에나 나오는 내용)은 쓰지 않는다. 최근 발행됐거나
+최근 며칠 사이 커뮤니티에서 눈에 띄게 언급된 것만 쓴다. `WebSearch`로 아래를
+확인한다.
+
+- Anthropic·OpenAI 공식 릴리스 노트나 블로그에 최근 며칠~몇 주 안에 올라온
+  신규 기능. 날짜가 분명한 것을 우선한다(예: "2026-09-16 Claude Cowork·Chat
+  통합"처럼 언제 나온 소식인지 특정할 수 있어야 한다)
+- 업계에서 자주 인용되는 필자(Simon Willison류)나 공식 계정(X의 `@claudeai`,
+  `@OpenAI` 등)이 다룬 것
+- 설치 수·스타 수처럼 확인 가능한 수치가 있으면 근거로 함께 확인한다
+
+검색으로 확인이 안 되는 소재는 쓰지 않는다 — 지어내지 말고 다른 후보를 찾는다.
+"화제"라고 부를 근거(날짜, 수치, 출처)가 하나도 안 잡히면 이 카드는 건너뛰고
+왜 건너뛰었는지 마지막 보고에 적는다.
+
+**카드 작성.** 나머지 필드는 뉴스 카드와 같은 규칙이되, 값은 아래를 따른다.
+
+| 필드 | 값 |
+|---|---|
+| `chip.text` | `"활용팁"` 고정 |
+| `title` | 명사형 종결(2.1.1절), 무엇이 가능해졌는지 한 줄로 |
+| `body` | 했습니다체, 무엇이 새로운가 → 왜 클로드 코드·코덱스 사용자에게 의미 있는가 순서 |
+| `chips` | `#` 3개, 도구·기능 이름 위주(예: `#클로드코워크` `#에이전트` `#자동화`) |
+| `link` | 공식 발표·문서·평판 있는 리뷰 글 등 **실제 존재하는** URL. 검색으로 접속을 확인하지 못한 URL은 절대 쓰지 않는다 |
+| `media` | 공식 제품 페이지·발표 글에 쓸 만한 이미지가 있으면 쓰고, 없으면 `CONTENT_CONTRACT.md` 5.0절 순서대로 삽화나 `media: null` |
+
+**최근 발행분과 중복 점검.** `recent_editions.py`는 뉴스 후보 기준이라 이 카드는
+잡아주지 않는다. 최근 발행 이력(`GET /ai/api/editions`)에서 지난 활용팁 카드
+제목을 직접 눈으로 훑어, 같은 도구·기능을 반복해서 쓰지 않는다. 같은 소재라도
+새 국면(베타 → 정식 출시 등)이 있으면 다시 써도 된다.
+
+**5. 조립 단계에서 잊지 말 것.** 이 카드가 링크한 매체·사이트도 `closing.sources`
+에 추가한다 — 누락하면 `verify_edition.py`가 FAIL 한다.
 
 ### 4. 문구 작성
 
