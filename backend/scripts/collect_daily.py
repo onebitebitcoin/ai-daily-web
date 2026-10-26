@@ -379,7 +379,10 @@ def _fetch_image_bytes(client: httpx.Client, url: str) -> bytes | None:
     try:
         response = client.get(url, timeout=IMAGE_FETCH_TIMEOUT)
         response.raise_for_status()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError) as exc:
+        # ValueError 는 og:image 파싱이 만들어낸 손상된 URL(제어문자 섞임 등)을
+        # httpx 가 거부할 때 나온다 — 이미지 하나의 URL 결함으로 전체 수집을
+        # 막지 않는다.
         print(f"경고: 이미지 다운로드 실패, 건너뜀 ({url}): {exc!r}", file=sys.stderr)
         return None
     return response.content

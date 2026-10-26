@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pillow_avif  # noqa: F401  — import 만으로 Pillow 에 AVIF 디코더를 등록한다.
 from PIL import Image
 
 # 카드 이미지 영역은 뷰포트 폭의 100%, 높이의 40%다. 480은 Save-Data용,
