@@ -246,7 +246,14 @@ def og_image_file(
         raise HTTPException(status_code=404, detail="no source image for this edition")
 
     try:
-        resp = httpx.get(image_url, timeout=10, follow_redirects=True)
+        # 위키미디어·flickr 삽화는 httpx 기본 UA 를 403 으로 막는다(2026-10-25 btc 실측) —
+        # 카드 이미지 프록시와 같은 헤더를 쓴다.
+        resp = httpx.get(
+            image_url,
+            timeout=10,
+            follow_redirects=True,
+            headers=imgproxy.SOURCE_REQUEST_HEADERS,
+        )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="failed to fetch source image") from exc

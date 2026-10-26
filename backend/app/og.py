@@ -39,7 +39,12 @@ def resolve_og_image_url(content: dict[str, Any], card_index: int | None = None)
     """링크 미리보기에 쓸 이미지 URL을 반환한다.
 
     `card_index` 가 가리키는 카드에 쓸 그림이 있으면 그것을 먼저 쓴다. 그 카드에
-    그림이 없거나 인덱스가 범위를 벗어나면 카드 1(첫 뉴스 카드)로 되돌아간다.
+    그림이 없거나 인덱스가 범위를 벗어나면 아래 에디션 기준으로 되돌아간다.
+
+    `meta.og_image`가 있으면 그것을, 없으면 카드 1(첫 뉴스 카드)의 이미지를 쓴다.
+    카드 1의 그림은 그 기사에 맞춰 고른 것이라, 1200x630으로 중앙을 자르면 피사체가
+    잘려나가거나 톤이 브랜드와 어긋나는 날이 있다. 그럴 때 카드 본문은 그대로 두고
+    썸네일만 갈아끼우라고 `meta.og_image`를 둔다.
 
     stem(번들 asset)이나 이미지 자체가 없으면 None — CONTENT_CONTRACT.md 4장에
     따르면 배포본은 항상 절대 URL을 쓰므로, stem은 로컬 시드 fixture에서만 나온다."""
@@ -49,6 +54,9 @@ def resolve_og_image_url(content: dict[str, Any], card_index: int | None = None)
         if picked and picked.startswith("http"):
             return picked
 
+    override = (content.get("meta") or {}).get("og_image")
+    if override and override.startswith("http"):
+        return override
     cards = content.get("cards") or []
     if not cards:
         return None

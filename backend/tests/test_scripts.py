@@ -29,6 +29,7 @@ def reference_payload(date: str = "2026-07-30") -> dict[str, Any]:
     payload["cover"] = collect_daily.apply_date_to_cover(
         payload["cover"], datetime.date.fromisoformat(date)
     )
+    payload["meta"]["og_image"] = "https://cdn.hidomin.com/news/photo/202610/1.jpg"
     for card in payload["cards"]:
         card["title"] = f"소식 정리 {card['num']}"
         card["body"] = "그렇습니다."
@@ -2580,3 +2581,179 @@ def test_recent_image_hashes_returns_empty_when_history_is_unreachable(
 
     assert digests == []
     assert capsys.readouterr().err != ""
+
+
+# ---- 섬네일 게이트 (push_edition.check_og_image) ----
+#
+# 2026-10-24 발행분은 meta.og_image 를 비워 둔 탓에 1번 카드의 AI 만화(동전 머리
+# 양복 인물)가 그대로 링크 미리보기로 나갔다. 섬네일은 매번 실사진으로 직접 고른다.
+
+
+def _payload_with_og_image(og_image: str | None) -> dict:
+    payload = reference_payload()
+    payload["meta"]["og_image"] = og_image
+    return payload
+
+
+def test_og_image_is_required() -> None:
+    content = EditionContent(**_payload_with_og_image(None))
+
+    with pytest.raises(SystemExit) as exc:
+        push_edition.check_og_image(content)
+
+    assert "meta.og_image" in str(exc.value)
+
+
+def test_og_image_rejects_ai_host() -> None:
+    """토큰포스트 본문 그림은 자체 AI 생성물이다."""
+    content = EditionContent(
+        **_payload_with_og_image("https://f1.tokenpost.kr/2026/10/2us9g57e38.jpg")
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        push_edition.check_og_image(content)
+
+    assert "AI" in str(exc.value)
+
+
+ILLUSTRATION_URL = "https://live.staticflickr.com/7512/16250782696_b85de6bde5_b.jpg"
+
+
+def test_og_image_rejects_illustration_not_credited_on_a_card() -> None:
+    """섬네일에는 출처를 적을 자리가 없다 — 카드에 credit 과 함께 실려 있어야 한다."""
+    content = EditionContent(**_payload_with_og_image(ILLUSTRATION_URL))
+
+    with pytest.raises(SystemExit) as exc:
+        push_edition.check_og_image(content)
+
+    assert "credit" in str(exc.value)
+
+
+def test_og_image_accepts_illustration_credited_on_a_card() -> None:
+    """실사진이 주제와 동떨어진 날은 주제를 떠올리게 하는 삽화를 섬네일로 쓴다."""
+    payload = _payload_with_og_image(ILLUSTRATION_URL)
+    payload["cards"][0]["media"] = {
+        "image": ILLUSTRATION_URL,
+        "href": None,
+        "cta": None,
+        "credit": "Oil tanker · someone (CC BY 2.0)",
+    }
+    content = EditionContent(**payload)
+
+    push_edition.check_og_image(content)
+
+
+def test_og_image_accepts_article_photo() -> None:
+    content = EditionContent(
+        **_payload_with_og_image("https://cdn.hidomin.com/news/photo/202610/1.jpg")
+    )
+
+    push_edition.check_og_image(content)
+
+
+def _png(color: tuple[int, int, int], split: bool = False) -> bytes:
+    import io
+
+    from PIL import Image
+
+    img = Image.new("RGB", (64, 64), color)
+    if split:
+        for x in range(32):
+            for y in range(64):
+                img.putpixel((x, y), (255 - color[0], 255 - color[1], 255 - color[2]))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _thumbnail_history_client(
+    previous: dict[str, Any], images: dict[str, bytes]
+) -> httpx.Client:
+    """2026-07-29 에디션 하나만 발행돼 있는 API 와 이미지 CDN 을 흉내 낸다."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.endswith("/api/editions"):
+            return httpx.Response(200, json=[{"date": "2026-07-29"}])
+        if url.endswith("/api/editions/2026-07-29"):
+            return httpx.Response(200, json=previous)
+        if url in images:
+            return httpx.Response(200, content=images[url])
+        return httpx.Response(404)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _previous_edition(og_image: str | None, card1_image: str) -> dict[str, Any]:
+    payload = reference_payload("2026-07-29")
+    payload["meta"]["og_image"] = og_image
+    payload["cards"][0]["media"] = {"image": card1_image, "href": None, "cta": None}
+    return payload
+
+
+def test_og_image_reused_url_is_rejected() -> None:
+    url = "https://cdn.hidomin.com/news/photo/202610/1.jpg"
+    content = EditionContent(**_payload_with_og_image(url))
+    previous = _previous_edition(url, "https://cdn.example.kr/other.jpg")
+
+    with _thumbnail_history_client(previous, {}) as client:
+        with pytest.raises(SystemExit) as exc:
+            push_edition.check_og_image_not_reused(client, "http://api", content)
+
+    assert "2026-07-29" in str(exc.value)
+
+
+def test_og_image_matching_old_card1_thumbnail_is_rejected() -> None:
+    """og_image 가 없던 시절에는 1번 카드 그림이 섬네일이었다 — 그것과도 비교한다."""
+    url = "https://cdn.blockmedia.co.kr/2025/11/cartoon.png"
+    content = EditionContent(**_payload_with_og_image(url))
+    previous = _previous_edition(None, url)
+
+    with _thumbnail_history_client(previous, {}) as client:
+        with pytest.raises(SystemExit):
+            push_edition.check_og_image_not_reused(client, "http://api", content)
+
+
+def test_og_image_same_picture_under_new_url_is_rejected() -> None:
+    new_url = "https://cdn.a.kr/new.jpg"
+    old_url = "https://cdn.b.kr/old.jpg"
+    picture = _png((200, 30, 30), split=True)
+    content = EditionContent(**_payload_with_og_image(new_url))
+    previous = _previous_edition(old_url, "https://cdn.b.kr/card.jpg")
+
+    with _thumbnail_history_client(previous, {new_url: picture, old_url: picture}) as client:
+        with pytest.raises(SystemExit):
+            push_edition.check_og_image_not_reused(client, "http://api", content)
+
+
+def test_og_image_new_picture_passes() -> None:
+    new_url = "https://cdn.a.kr/new.jpg"
+    old_url = "https://cdn.b.kr/old.jpg"
+    content = EditionContent(**_payload_with_og_image(new_url))
+    previous = _previous_edition(old_url, "https://cdn.b.kr/card.jpg")
+    images = {new_url: _png((200, 30, 30), split=True), old_url: _png((30, 30, 200))}
+
+    with _thumbnail_history_client(previous, images) as client:
+        push_edition.check_og_image_not_reused(client, "http://api", content)
+
+
+def test_card_image_from_ai_host_is_rejected() -> None:
+    """섬네일뿐 아니라 카드 그림에도 AI 생성물을 쓰지 않는다."""
+    payload = reference_payload()
+    payload["cards"][2]["media"] = {
+        "image": "https://f1.tokenpost.kr/2026/10/2us9g57e38.jpg",
+        "href": None,
+        "cta": None,
+    }
+    content = EditionContent(**payload)
+
+    with pytest.raises(SystemExit) as exc:
+        push_edition.check_card_images_not_ai(content)
+
+    assert "카드 3" in str(exc.value)
+
+
+def test_card_images_from_article_hosts_pass() -> None:
+    content = EditionContent(**reference_payload())
+
+    push_edition.check_card_images_not_ai(content)
