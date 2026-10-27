@@ -1,6 +1,6 @@
 import { CardArt } from '../CardArt';
 import { showsSubtitleInBody } from '../artText';
-import { hasMoreToRead, type Card } from '../content';
+import { hasMoreToRead, type Card, type TrendingItem } from '../content';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -21,6 +21,8 @@ interface CardSlideProps {
   liked: boolean;
   onToggleLike: () => void;
   onShare: () => void;
+  /** 이 카드가 걸린 트렌딩 항목(cardTrend). 없으면 지정 뉴스 표시만 남거나 줄이 사라진다. */
+  trend: TrendingItem | null;
 }
 
 export function CardSlide({
@@ -35,6 +37,7 @@ export function CardSlide({
   liked,
   onToggleLike,
   onShare,
+  trend,
 }: CardSlideProps) {
   return (
     <div className={'slide' + (isActive ? ' is-active' : '')} role="group">
@@ -57,6 +60,8 @@ export function CardSlide({
             <div className="primary">{card.title}</div>
             {showsSubtitleInBody(card) && <div className="secondary">{card.subtitle}</div>}
           </div>
+
+          <CardHeat trend={trend} pinned={card.pinned === true} />
 
           {card.chips && card.chips.length > 0 && (
             <div className="chips-row">
@@ -106,6 +111,35 @@ export function CardSlide({
       </div>
     </div>
   );
+}
+
+/** 카드 화제성 줄. 트렌딩 슬라이드와 같은 막대를 써서 "이 카드가 그날 얼마나
+ *  뜨거웠나"를 같은 눈금으로 읽게 한다. 트렌딩에 안 걸린 카드에 0 막대를 그리면
+ *  "안 중요한 소식"처럼 읽히므로, 그런 카드는 줄을 통째로 뺀다. */
+function CardHeat({ trend, pinned }: { trend: TrendingItem | null; pinned: boolean }) {
+  if (trend) {
+    return (
+      <div className="card-heat">
+        <div className="card-heat-head">
+          <span className="card-heat-label">
+            TRENDING {trend.rank}위 · {trend.topic}
+          </span>
+          <span className="card-heat-meta">{trend.sources}개 매체</span>
+        </div>
+        <div className="trending-bar-track">
+          <div className="trending-bar-fill" style={{ width: `${trend.heat}%` }} />
+        </div>
+      </div>
+    );
+  }
+  if (pinned) {
+    return (
+      <div className="card-heat">
+        <span className="card-heat-label">지정 뉴스</span>
+      </div>
+    );
+  }
+  return null;
 }
 
 /** 아이콘은 인라인 SVG로 둔다 — 이모지 금지 규칙이 있고, 이 둘 때문에
